@@ -1,0 +1,21 @@
+# ESP-IDF 构建目录
+build/
+
+# SDK 配置文件（每台机器可能不同）
+sdkconfig
+sdkconfig.old
+
+# VS Code 设置（可选，如果想同步 VS Code 配置可以删除这行）
+.vscode/
+
+# macOS 系统文件
+.DS_Store
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
+
+# Python 缓存（ESP-IDF 工具会产生）
+__pycache__/
+*.py[cod]
