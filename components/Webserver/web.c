@@ -74,7 +74,7 @@ httpd_handle_t start_webserver(void)
 
         // 定义JPG图片的URI
         httpd_uri_t jpg_uri = {
-            .uri       = "/back.jpeg",
+            .uri       = "/back.jpg",
             .method    = 1,
             .handler   = jpg_handler,
             .user_ctx  = NULL
