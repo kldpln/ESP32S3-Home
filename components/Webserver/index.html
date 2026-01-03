@@ -24,20 +24,53 @@
                 background-position: center; /* 背景图片居中 */
                 color: rgb(0, 0, 0); /* 文字颜色为白色 */
             }
+
             .container {
                 text-align: center; /* 文字居中 */
                 background: rgba(255, 255, 255, 0.1); /* 半透明背景 */
                 backdrop-filter: blur(20px); /* 背景模糊效果 */
                 -webkit-backdrop-filter: blur(20px);/* 兼容Safari */
                 padding: 40px; /* 内边距 */
-                border-radius: 24px; /* 圆角 */
+                border-radius: 16px; /* 圆角 */
                 box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); /* 阴影效果 */
                 width: 90%; /* 宽度为90% */
                 max-width: 600px; /* 最大宽度为600px */
             }
             
+            .cards-wrapper {
+                display: flex;
+                justify-content: space-around; /* 卡片间距均匀分布 */
+                flex-wrap: wrap; /* 允许换行 */
+                gap: 20px; /* 若换行则设置卡片间距 */
+            }
+
+            .card {
+                background: rgba(0, 0, 0, 0.15);
+                backdrop-filter: blur(20px); /* 背景模糊效果 */
+                -webkit-backdrop-filter: blur(20px);/* 兼容Safari */
+                padding: 20px; /* 内边距 */
+                border-radius: 16px; /* 卡片圆角 */
+                min-width: 100px; /* 最小宽度 */
+                flex: 1; /* 卡片等分宽度 */
+                transition: all 1s ease;/* 平滑过渡效果 */
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15); /* 阴影效果 */
+            }
+
+            .card:hover {
+                transform: translateY(-5px); /* 鼠标悬停时上移 */
+                background: rgba(0, 0, 0, 0.2);
+            }
+
             h1 {
-                font-size: 10vw;
+                font-size: 7vw;
+                margin-bottom: 30px; /* 底部外边距 */
+                font-weight: 600;/* 字重 */   
+            }
+
+            h2 {
+                font-size: 5vw;
+                margin-bottom: 5px; /* 底部外边距 */
+                font-weight: 600;/* 字重 */   
             }
         </style>
     </head>
@@ -49,7 +82,7 @@
             <!--温湿度卡片-->
             <div class="cards-wrapper">
                 <!-- 温度卡片 -->
-                 <div class="temperature">
+                 <div class="card">
                     <h2>温度</h2>
                     <div class="value-box">
                         <span id="temp-val">--</span>
@@ -57,7 +90,7 @@
                     </div>
                  </div>
                 <!-- 湿度卡片 -->
-                <div class="humidity">
+                <div class="card">
                     <h2>湿度</h2>
                     <div class="value-box">
                         <span id="hum-val">--</span>
