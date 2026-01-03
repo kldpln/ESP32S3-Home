@@ -14,66 +14,8 @@ static esp_err_t index_handler(httpd_req_t *req)
 {
     // 设置响应类型为text/html
     httpd_resp_set_type(req, "text/html");
-
-    // 获取当前温湿度数据
-    int temp_int = get_temperature_int();
-    int temp_dec = get_temperature_dec();
-    int hum_int = get_humidity_int();
-    int hum_dec = get_humidity_dec();
-
-    // 生成动态 HTML
-    char html_response[2048];
-    snprintf(html_response, sizeof(html_response),
-             "<!DOCTYPE html>"
-             "<html>"
-             "<head>"
-             "<meta charset=\"UTF-8\" />"
-             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />"
-             "<title>ESP32 Web Server</title>"
-             "<style>"
-             "body {"
-             "background-color: #202020;"
-             "color: #fff;"
-             "text-align: center;"
-             "height: 100vh;"
-             "margin: 0;"
-             "display: flex;"
-             "flex-direction: column;"
-             "justify-content: center;"
-             "align-items: center;"
-             "font-family: Arial, sans-serif;"
-             "background-image: url('/back.jpeg');"
-             "background-size: cover;"
-             "background-repeat: no-repeat;"
-             "background-position: center;"
-             "}"
-             "h1 { font-size: 2em; margin-bottom: 20px; }"
-             ".data { font-size: 1.5em; margin: 10px 0; }"
-             "</style>"
-             "<script>"
-             "async function updateData() {"
-             "    try {"
-             "        const response = await fetch('/data');"
-             "        const data = await response.json();"
-             "        document.getElementById('temp').textContent = data.temperature + ' °C';"
-             "        document.getElementById('hum').textContent = data.humidity + ' %%';"
-             "    } catch (error) {"
-             "        console.error('Error fetching data:', error);"
-             "    }"
-             "}"
-             "setInterval(updateData, 3000); // 每3秒更新一次"
-             "</script>"
-             "</head>"
-             "<body>"
-             "<h1>ESP32 Sensor Data</h1>"
-             "<div class=\"data\">Temperature: <span id=\"temp\">%d.%d °C</span></div>"
-             "<div class=\"data\">Humidity: <span id=\"hum\">%d.%d %%</span></div>"
-             "</body>"
-             "</html>",
-             temp_int, temp_dec, hum_int, hum_dec);
-
     // 发送动态 HTML
-    return httpd_resp_send(req, html_response, strlen(html_response));
+    return httpd_resp_send(req, (const char *)_binary_index_html_start, _binary_index_html_end - _binary_index_html_start);
 }
 
 // 处理数据请求，返回 JSON
