@@ -5,9 +5,9 @@
 extern const uint8_t _binary_index_html_start[];
 extern const uint8_t _binary_index_html_end[];
 
-// 嵌入 PNG 图片
-extern const uint8_t _binary_back_png_start[];
-extern const uint8_t _binary_back_png_end[];
+// 嵌入 JPG 图片
+extern const uint8_t _binary_back_jpg_start[];
+extern const uint8_t _binary_back_jpg_end[];
 
 // 处理index.html文件请求
 static esp_err_t index_handler(httpd_req_t *req)
@@ -42,7 +42,7 @@ static esp_err_t index_handler(httpd_req_t *req)
              "justify-content: center;"
              "align-items: center;"
              "font-family: Arial, sans-serif;"
-             "background-image: url('/back.png');"
+             "background-image: url('/back.jpeg');"
              "background-size: cover;"
              "background-repeat: no-repeat;"
              "background-position: center;"
@@ -98,13 +98,13 @@ static esp_err_t data_handler(httpd_req_t *req)
     return httpd_resp_send(req, json_response, strlen(json_response));
 }
 
-// 处理back.png图片请求
-static esp_err_t png_handler(httpd_req_t *req)
+// 处理back.jpg图片请求
+static esp_err_t jpg_handler(httpd_req_t *req)
 {
-    // 设置响应类型为image/png
-    httpd_resp_set_type(req, "image/png");
-    // 发送PNG图片内容
-    return httpd_resp_send(req, (const char *)_binary_back_png_start, _binary_back_png_end - _binary_back_png_start);
+    // 设置响应类型为image/jpeg
+    httpd_resp_set_type(req, "image/jpeg");
+    // 发送JPG图片内容
+    return httpd_resp_send(req, (const char *)_binary_back_jpg_start, _binary_back_jpg_end - _binary_back_jpg_start);
 }
 
 // 定义一个函数，用于启动web服务器
@@ -130,15 +130,15 @@ httpd_handle_t start_webserver(void)
         // 注册uri的处理函数
         httpd_register_uri_handler(server, &index_uri);
 
-        // 定义PNG图片的URI
-        httpd_uri_t png_uri = {
-            .uri       = "/back.png",
+        // 定义JPG图片的URI
+        httpd_uri_t jpg_uri = {
+            .uri       = "/back.jpeg",
             .method    = 1,
-            .handler   = png_handler,
+            .handler   = jpg_handler,
             .user_ctx  = NULL
         };
-        // 注册PNG处理函数
-        httpd_register_uri_handler(server, &png_uri);
+        // 注册JPG处理函数
+        httpd_register_uri_handler(server, &jpg_uri);
 
         // 定义数据API的URI
         httpd_uri_t data_uri = {
