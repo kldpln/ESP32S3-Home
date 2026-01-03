@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8">
+        <!--设置显示比例自适应-->
+        <meta name="viewport" content="width=device-width,initial-scale=1.0">
+        <!--设置网页标题-->
+        <title>温湿度监控系统</title>
+        <style>
+            /* 全局样式重置 */
+            * {
+                margin: 0; /* 去除默认外边距 */
+                padding: 0;/* 去除默认内边距 */
+                box-sizing: border-box;/* 设定盒模型为border-box，方便布局 */
+            }
+            body {
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                height: 100vh; /* 视口高度 */
+                display: flex; /* 使用Flexbox布局 */
+                justify-content: center; /* 水平居中 */
+                align-items: center; /* 垂直居中 */
+                background-image: url(/back.jpg); /* 背景图片 */
+                background-size: cover; /* 背景图片覆盖整个容器 */
+                background-position: center; /* 背景图片居中 */
+                color: rgb(0, 0, 0); /* 文字颜色为白色 */
+            }
+            .container {
+                text-align: center; /* 文字居中 */
+                background: rgba(255, 255, 255, 0.1); /* 半透明背景 */
+                backdrop-filter: blur(20px); /* 背景模糊效果 */
+                -webkit-backdrop-filter: blur(20px);/* 兼容Safari */
+                padding: 40px; /* 内边距 */
+                border-radius: 24px; /* 圆角 */
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); /* 阴影效果 */
+                width: 90%; /* 宽度为90% */
+                max-width: 600px; /* 最大宽度为600px */
+            }
+            
+        </style>
+    </head>
+    <body>
+        <!-- 温湿度信息容器 -->
+        <div class="container">
+            <h1>Legdema's Home</h1>
+
+            <!--温湿度卡片-->
+            <div class="cards-wrapper">
+                <!-- 温度卡片 -->
+                 <div class="temperature">
+                    <h2>温度</h2>
+                    <div class="value-box">
+                        <span id="temp-val">--</span>
+                        <span id="unit">°C</span>
+                    </div>
+                 </div>
+                <!-- 湿度卡片 -->
+                <div class="humidity">
+                    <h2>湿度</h2>
+                    <div class="value-box">
+                        <span id="hum-val">--</span>
+                        <span id="unit">%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
