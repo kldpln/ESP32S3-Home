@@ -15,14 +15,16 @@
             }
             body {
                 font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-                height: 100vh; /* 视口高度 */
+                min-height: 100vh; /* 最小高度100vh，允许滚动 */
                 display: flex; /* 使用Flexbox布局 */
                 justify-content: center; /* 水平居中 */
                 align-items: center; /* 垂直居中 */
                 background-image: url(back.jpg); /* 背景图片 */
                 background-size: cover; /* 背景图片覆盖整个容器 */
                 background-position: center; /* 背景图片居中 */
+                background-attachment: fixed; /* 背景固定，防止滚动穿帮 */
                 color: rgb(255, 255, 255); /* 文字颜色为白色 */
+                padding: 40px 0; /* 增加上下内边距，防贴边 */
             }
 
             .container {
@@ -62,13 +64,13 @@
             }
 
             h1 {
-                font-size: 7vw;
+                font-size: clamp(2rem, 5vw, 3.5rem); /* 限制最小2rem，最大3.5rem，中间自适应 */
                 margin-bottom: 30px; /* 底部外边距 */
                 font-weight: 600;/* 字重 */   
             }
 
             h2 {
-                font-size: 5vw;
+                font-size: clamp(1.2rem, 4vw, 2rem); /* 同样限制h2的大小 */
                 margin-bottom: 5px; /* 底部外边距 */
                 font-weight: 600;/* 字重 */   
             }
@@ -98,21 +100,124 @@
                     </div>
                 </div>
             </div>
+
+            <!--图表显示区域-->
+             <div class="card" style="margin-top: 20px; width: 100%; flex: 100%;">
+                <canvas id="tempChart"></canvas>
+             </div>
         </div>
 
-        <!-- 脚本模块-->
+        <!--图表库-->
+        <script src="/chart.js"></script>
+
+        <!-- 温湿度文字显示脚本模块-->
         <script>
-            function fetchData()
-            {
-            fetch('/data') // 向服务器请求数据
-                 .then(response => response.json()) // 解析为JSON格式
-                 .then(data =>{
-                        document.getElementById("temp-val").innerText = data.temperature; // 更新温度值
-                        document.getElementById("hum-val").innerText = data.humidity; // 更新湿度值
-                 })
+            // === 初始化图表配置 ===
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            const myChart = new Chart(ctx, {
+                type: 'line', // 折线图
+                data: {
+                    labels: [], // X轴：时间
+                    datasets: [
+                        {
+                            label: '温度 (°C)',
+                            data: [],
+                            borderColor: 'rgba(255, 99, 132, 1)', // 红色线条
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)', // 红色填充背景
+                            tension: 0.4, // 平滑曲线
+                            borderWidth: 2,
+                            yAxisID: 'y' // 绑定到左侧Y轴
+                        },
+                        {
+                            label: '湿度 (%)',
+                            data: [],
+                            borderColor: 'rgba(54, 162, 235, 1)', // 蓝色线条
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            tension: 0.4,
+                            borderWidth: 2,
+                            yAxisID: 'y1' // 绑定到右侧Y轴 (双轴显示更清晰)
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    animation: {
+                        duration: 1000, // 每次更新时的动画时长
+                        easing: 'easeOutQuart' // 缓动效果
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: '温度' },
+                            min: 0, // 固定温度下限
+                            max: 50 // 固定温度上限
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: '湿度' },
+                            min: 0, // 固定湿度下限
+                            max: 100, // 固定湿度上限
+                            grid: {
+                                drawOnChartArea: false, // 右侧轴不画网格线，防乱
+                            }
+                        }
+                    }
                 }
-            setInterval(fetchData, 2000); // 每2秒获取一次数据
-            fetchData(); // 页面加载时立即获取一次数据
+            });
+
+            // === 数据获取与更新逻辑 ===
+            function fetchData() {
+                fetch('/data')
+                    .then(response => response.json())
+                    .then(data => {
+                        // ---更新卡片文字---
+                        document.getElementById("temp-val").innerText = data.temperature;
+                        document.getElementById("hum-val").innerText = data.humidity;
+
+                        // ---更新图表---
+                        const now = new Date();
+                        const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
+
+                        // 添加新时间点到X轴
+                        myChart.data.labels.push(timeLabel);
+                        
+                        // 先填入 0 或起始值，让点先“蹲在底部”
+                        myChart.data.datasets[0].data.push(0);
+                        myChart.data.datasets[1].data.push(0);
+
+                        // 保持图表不至于太挤，只保留最近10个点
+                        if (myChart.data.labels.length > 10) {
+                            myChart.data.labels.shift(); // 删掉最旧的时间
+                            myChart.data.datasets[0].data.shift(); // 删掉最旧的温度
+                            myChart.data.datasets[1].data.shift(); // 删掉最旧的湿度
+                        }
+
+                        // 第一步更新：静默更新（无动画），这时点在底部
+                        myChart.update('none');
+
+                        // 修改为真实数据
+                        // 获取数组最后一个位置的索引
+                        const lastIndex = myChart.data.datasets[0].data.length - 1;
+                        myChart.data.datasets[0].data[lastIndex] = data.temperature;
+                        myChart.data.datasets[1].data[lastIndex] = data.humidity;
+
+                        // 第二步更新：默认更新（带动画），点会从底部“飘”上来
+                        myChart.update();
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+
+            // === 启动定时器 ===
+            setInterval(fetchData, 2000);
+            fetchData(); // 初始执行一次
         </script>
     </body>
 </html>

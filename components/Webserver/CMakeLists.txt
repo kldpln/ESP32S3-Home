@@ -6,4 +6,5 @@ idf_component_register(SRCS "web.c"
 target_add_binary_data(${COMPONENT_TARGET} "back.jpg" BINARY)
 # 嵌入 HTML
 target_add_binary_data(${COMPONENT_TARGET} "index.html" TEXT)
-#update
+#图表库
+target_add_binary_data(${COMPONENT_TARGET} "chart.js.gz" BINARY)

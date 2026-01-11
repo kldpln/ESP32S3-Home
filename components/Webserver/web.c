@@ -9,6 +9,10 @@ extern const uint8_t _binary_index_html_end[];
 extern const uint8_t _binary_back_jpg_start[];
 extern const uint8_t _binary_back_jpg_end[];
 
+//嵌入 chart.js 库
+extern const uint8_t _binary_chart_js_gz_start[];
+extern const uint8_t _binary_chart_js_gz_end[];
+
 // 处理index.html文件请求
 static esp_err_t index_handler(httpd_req_t *req)
 {
@@ -47,6 +51,17 @@ static esp_err_t jpg_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "image/jpeg");
     // 发送JPG图片内容
     return httpd_resp_send(req, (const char *)_binary_back_jpg_start, _binary_back_jpg_end - _binary_back_jpg_start);
+}
+
+//处理chart.js请求
+static esp_err_t chart_handler(httpd_req_t *req)
+{
+    // 设置响应类型为application/javascript
+    httpd_resp_set_type(req, "application/javascript");
+    // 设置内容编码为gzip
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    // 发送chart.js内容
+    return httpd_resp_send(req, (const char *)_binary_chart_js_gz_start, _binary_chart_js_gz_end - _binary_chart_js_gz_start);
 }
 
 // 定义一个函数，用于启动web服务器
@@ -91,6 +106,16 @@ httpd_handle_t start_webserver(void)
         };
         // 注册数据处理函数
         httpd_register_uri_handler(server, &data_uri);
+
+        // 定义chart.js的URI
+        httpd_uri_t chart_uri = {
+            .uri       = "/chart.js",
+            .method    = 1,
+            .handler   = chart_handler,
+            .user_ctx  = NULL
+        };
+        // 注册chart.js处理函数
+        httpd_register_uri_handler(server, &chart_uri);
     }
 
     // 返回httpd的句柄
