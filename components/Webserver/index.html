@@ -99,5 +99,20 @@
                 </div>
             </div>
         </div>
+
+        <!-- 脚本模块-->
+        <script>
+            function fetchData()
+            {
+            fetch('/data') // 向服务器请求数据
+                 .then(response => response.json()) // 解析为JSON格式
+                 .then(data =>{
+                        document.getElementById("temp-val").innerText = data.temperature; // 更新温度值
+                        document.getElementById("hum-val").innerText = data.humidity; // 更新湿度值
+                 })
+                }
+            setInterval(fetchData, 3000); // 每3秒获取一次数据
+            fetchData(); // 页面加载时立即获取一次数据
+        </script>
     </body>
 </html>

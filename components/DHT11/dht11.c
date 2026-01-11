@@ -26,7 +26,7 @@ void dht11_init()
         .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
     gpio_config(&cnf);
-
+    gpio_set_level(DHT11_GPIO, 1);
     vTaskDelay(1200 / portTICK_PERIOD_MS);
 }
 
