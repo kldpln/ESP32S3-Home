@@ -1,3 +1,3 @@
 idf_component_register(SRCS "dht11.c"
                     INCLUDE_DIRS "."
-                    REQUIRES driver esp_timer)
+                    REQUIRES driver esp_timer nvs_flash)

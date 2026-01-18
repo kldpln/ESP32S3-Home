@@ -90,6 +90,9 @@
                         <span id="temp-val">--</span>
                         <span id="unit">°C</span>
                     </div>
+                    <div style="font-size: 0.8rem; margin-top: 5px; color: #eee;">
+                        Max: <span id="max-temp-val">--</span> | Min: <span id="min-temp-val">--</span>
+                    </div>
                  </div>
                 <!-- 湿度卡片 -->
                 <div class="card">
@@ -97,6 +100,9 @@
                     <div class="value-box">
                         <span id="hum-val">--</span>
                         <span id="unit">%</span>
+                    </div>
+                    <div style="font-size: 0.8rem; margin-top: 5px; color: #eee;">
+                        Max: <span id="max-hum-val">--</span> | Min: <span id="min-hum-val">--</span>
                     </div>
                 </div>
             </div>
@@ -181,6 +187,14 @@
                         // ---更新卡片文字---
                         document.getElementById("temp-val").innerText = data.temperature;
                         document.getElementById("hum-val").innerText = data.humidity;
+                        
+                        // 更新统计数据
+                        if (data.max_temp && data.max_temp !== "-999.0") {
+                             document.getElementById("max-temp-val").innerText = data.max_temp;
+                             document.getElementById("min-temp-val").innerText = data.min_temp;
+                             document.getElementById("max-hum-val").innerText = data.max_hum;
+                             document.getElementById("min-hum-val").innerText = data.min_hum;
+                        }
 
                         // ---更新图表---
                         const now = new Date();

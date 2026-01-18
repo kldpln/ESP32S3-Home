@@ -34,11 +34,16 @@ static esp_err_t data_handler(httpd_req_t *req)
     int hum_int = get_humidity_int();
     int hum_dec = get_humidity_dec();
 
+    float max_t = get_max_temp();
+    float min_t = get_min_temp();
+    float max_h = get_max_hum();
+    float min_h = get_min_hum();
+
     // 生成 JSON
-    char json_response[128];
+    char json_response[256];
     snprintf(json_response, sizeof(json_response),
-             "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\"}",
-             temp_int, temp_dec, hum_int, hum_dec);
+             "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\", \"max_temp\": \"%.1f\", \"min_temp\": \"%.1f\", \"max_hum\": \"%.1f\", \"min_hum\": \"%.1f\"}",
+             temp_int, temp_dec, hum_int, hum_dec, max_t, min_t, max_h, min_h);
 
     // 发送 JSON
     return httpd_resp_send(req, json_response, strlen(json_response));

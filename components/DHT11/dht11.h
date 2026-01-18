@@ -21,4 +21,10 @@ int get_humidity_int(void);
 // 获取湿度（小数部分）
 int get_humidity_dec(void);
 
+// 获取统计数据 (Float)
+float get_max_temp(void);
+float get_min_temp(void);
+float get_max_hum(void);
+float get_min_hum(void);
+
 #endif // DHT11_H
