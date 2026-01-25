@@ -9,88 +9,146 @@
         <style>
             /* 全局样式重置 */
             * {
-                margin: 0; /* 去除默认外边距 */
-                padding: 0;/* 去除默认内边距 */
-                box-sizing: border-box;/* 设定盒模型为border-box，方便布局 */
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
             }
+
+            /* 使用伪元素修复移动端背景白边和固定问题 */
+            body::before {
+                content: "";
+                position: fixed;
+                top: 0; 
+                left: 0; 
+                width: 100%; 
+                height: 100%;
+                background-image: url(back.jpg);
+                background-size: cover;
+                background-position: center;
+                z-index: -1; /* 置于底层 */
+            }
+
             body {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-                min-height: 100vh; /* 最小高度100vh，允许滚动 */
-                display: flex; /* 使用Flexbox布局 */
-                justify-content: center; /* 水平居中 */
-                align-items: center; /* 垂直居中 */
-                background-image: url(back.jpg); /* 背景图片 */
-                background-size: cover; /* 背景图片覆盖整个容器 */
-                background-position: center; /* 背景图片居中 */
-                background-attachment: fixed; /* 背景固定，防止滚动穿帮 */
-                color: rgb(255, 255, 255); /* 文字颜色为白色 */
-                padding: 40px 0; /* 增加上下内边距，防贴边 */
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: rgb(255, 255, 255);
+                padding: 20px; /* 移动端减小边距 */
             }
 
             .container {
-                text-align: center; /* 文字居中 */
-                background: rgba(255, 255, 255, 0.1); /* 半透明背景 */
-                backdrop-filter: blur(20px); /* 背景模糊效果 */
-                -webkit-backdrop-filter: blur(20px);/* 兼容Safari */
-                padding: 40px; /* 内边距 */
-                border-radius: 16px; /* 圆角 */
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); /* 阴影效果 */
-                width: 90%; /* 宽度为90% */
-                max-width: 600px; /* 最大宽度为600px */
+                text-align: center;
+                background: rgba(0, 0, 0, 0.3); /* 加深一点背景让文字更清晰 */
+                backdrop-filter: blur(15px);
+                -webkit-backdrop-filter: blur(15px);
+                padding: 20px;
+                border-radius: 20px;
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+                width: 100%;
+                max-width: 600px;
             }
             
             .cards-wrapper {
-                display: flex;
-                justify-content: space-around; /* 卡片间距均匀分布 */
-                flex-wrap: wrap; /* 允许换行 */
-                gap: 20px; /* 若换行则设置卡片间距 */
+                display: grid; /* 改用Grid布局 */
+                grid-template-columns: 1fr 1fr; /* 两列等宽 */
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            
+            /* 手机竖屏时，如果宽度太小，卡片自动单列显示(可选，目前两列通常也没问题) */
+            @media (max-width: 350px) {
+                .cards-wrapper {
+                    grid-template-columns: 1fr;
+                }
             }
 
             .card {
-                background: rgba(0, 0, 0, 0.15);
-                backdrop-filter: blur(20px); /* 背景模糊效果 */
-                -webkit-backdrop-filter: blur(20px);/* 兼容Safari */
-                padding: 20px; /* 内边距 */
-                border-radius: 16px; /* 卡片圆角 */
-                min-width: 100px; /* 最小宽度 */
-                flex: 1; /* 卡片等分宽度 */
-                transition: all 0.5s ease;/* 平滑过渡效果 */
-                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.15); /* 阴影效果 */
+                background: rgba(255, 255, 255, 0.1); /* 稍微亮一点的卡片背景 */
+                padding: 15px;
+                border-radius: 16px;
+                transition: transform 0.3s ease;
+                border: 1px solid rgba(255, 255, 255, 0.1);
             }
 
-            .card:hover {
-                transform: translateY(-5px); /* 鼠标悬停时上移 */
-                background: rgba(0, 0, 0, 0.2);
+            .card:active {
+                transform: scale(0.98); /* 触摸反馈 */
             }
 
             h1 {
-                font-size: clamp(2rem, 5vw, 3.5rem); /* 限制最小2rem，最大3.5rem，中间自适应 */
-                margin-bottom: 30px; /* 底部外边距 */
-                font-weight: 600;/* 字重 */   
+                font-size: 1.8rem;
+                margin-bottom: 20px;
+                font-weight: 700;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             }
 
             h2 {
-                font-size: clamp(1.2rem, 4vw, 2rem); /* 同样限制h2的大小 */
-                margin-bottom: 5px; /* 底部外边距 */
-                font-weight: 600;/* 字重 */   
+                font-size: 1rem;
+                opacity: 0.9;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            /* 优化数值显示：大数字，清晰 */
+            .value-box {
+                margin: 10px 0;
+                display: flex;
+                justify-content: center;
+                align-items: baseline; /* 基线对齐，让单位沉底 */
+            }
+            
+            .value-box .val-number {
+                font-size: 2.5rem; /* 大字体 */
+                font-weight: 700;
+                line-height: 1;
+                /* 加上一点阴影防背景干扰 */
+                text-shadow: 0 2px 4px rgba(0,0,0,0.3); 
+            }
+
+            .value-box .val-unit {
+                font-size: 1.2rem;
+                margin-left: 4px;
+                opacity: 0.8;
+                font-weight: 500;
+            }
+
+            .stats {
+                font-size: 0.75rem; 
+                margin-top: 8px; 
+                color: rgba(255,255,255,0.7);
+                background: rgba(0,0,0,0.2);
+                padding: 4px 8px;
+                border-radius: 10px;
+                display: inline-block;
+            }
+
+            /* 图表容器优化 */
+            .chart-wrapper {
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 16px;
+                padding: 10px;
+                width: 100%;
+                /* 关键：给图表容器一个固定高度（或者vh），防止被压扁 */
+                height: 350px; 
+                position: relative;
             }
         </style>
     </head>
     <body>
-        <!-- 温湿度信息容器 -->
         <div class="container">
             <h1>Legdema's Home</h1>
 
-            <!--温湿度卡片-->
             <div class="cards-wrapper">
                 <!-- 温度卡片 -->
                  <div class="card">
                     <h2>温度</h2>
                     <div class="value-box">
-                        <span id="temp-val">--</span>
-                        <span id="unit">°C</span>
+                        <span id="temp-val" class="val-number">--</span>
+                        <span id="unit" class="val-unit">°C</span>
                     </div>
-                    <div style="font-size: 0.8rem; margin-top: 5px; color: #eee;">
+                    <div class="stats">
                         Max: <span id="max-temp-val">--</span> | Min: <span id="min-temp-val">--</span>
                     </div>
                  </div>
@@ -98,17 +156,17 @@
                 <div class="card">
                     <h2>湿度</h2>
                     <div class="value-box">
-                        <span id="hum-val">--</span>
-                        <span id="unit">%</span>
+                        <span id="hum-val" class="val-number">--</span>
+                        <span id="unit" class="val-unit">%</span>
                     </div>
-                    <div style="font-size: 0.8rem; margin-top: 5px; color: #eee;">
+                    <div class="stats">
                         Max: <span id="max-hum-val">--</span> | Min: <span id="min-hum-val">--</span>
                     </div>
                 </div>
             </div>
 
-            <!--图表显示区域-->
-             <div class="card" style="margin-top: 20px; width: 100%; flex: 100%;">
+            <!--图表显示区域 独立且固定高度-->
+             <div class="chart-wrapper">
                 <canvas id="tempChart"></canvas>
              </div>
         </div>
@@ -147,13 +205,14 @@
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false, // 关键：关闭默认比例，允许图表撑满自定义高度的容器
                     interaction: {
                         mode: 'index',
                         intersect: false,
                     },
                     animation: {
-                        duration: 1000, // 每次更新时的动画时长
-                        easing: 'easeOutQuart' // 缓动效果
+                        duration: 1000, 
+                        easing: 'easeOutQuart'
                     },
                     scales: {
                         y: {
