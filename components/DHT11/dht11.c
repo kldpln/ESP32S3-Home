@@ -24,10 +24,12 @@ static float curr_max_hum = -999.0;
 static float curr_min_hum = 999.0;
 
 static bool stats_saved = false;
+static bool first_read = true;
 static const char* NVS_NAMESPACE = "storage";
 
 // 温度 湿度buffer
 static uint8_t buffer[5];
+static uint8_t prebuffer[5];
 static int64_t phase_duration[3] = {0};
 static int64_t bit_duration_low[40] = {0};
 static int64_t bit_duration_high[40] = {0};
@@ -85,8 +87,7 @@ static esp_err_t DataRead()
 {
     int64_t time_since_waiting_start;
     esp_err_t result = ESP_FAIL;
-    memset(buffer, 0, sizeof(buffer));
-
+    memset(prebuffer, 0, sizeof(prebuffer));
     // 发送开始信号
     gpio_set_direction(DHT11_GPIO, GPIO_MODE_OUTPUT_OD);
     // 起始前先确保总线为高
@@ -159,7 +160,7 @@ static esp_err_t DataRead()
         bit_duration_high[j*8+i] = high_time;
 
         if (high_time > 40) {
-            buffer[j] |= (1U << (7 - i)); // 1
+            prebuffer[j] |= (1U << (7 - i)); // 1
         }
     }
 }
@@ -171,6 +172,19 @@ static esp_err_t DataRead()
         ESP_LOGE(TAG, "Data is all read.But CAN not set high.");
         return ESP_FAIL;
     }
+
+    // 量程外值检查
+    float hum = prebuffer[0] + prebuffer[1] / 10.0f;
+    float temp = prebuffer[2] + prebuffer[3] / 10.0f;
+
+    // 量程范围: Temp -20~60, Hum 5~95
+    if ((temp >= -20 && temp <= 60) && (hum >= 5 && hum <= 90)) {
+        memcpy(buffer, prebuffer, sizeof(buffer));
+    } else {
+        ESP_LOGE(TAG, "Data out of range! Temp: %.1f, Hum: %.1f", temp, hum);
+        return ESP_FAIL;
+    }
+
     return ESP_OK;
 }
 
@@ -201,17 +215,25 @@ static void dht11_task(void *pvParameters)
         esp_err_t result = DataRead();
         if (result == ESP_OK)
         {
-            ESP_LOGI(TAG, "Reading data succeed.");
+
             ESP_LOGI(TAG, "Temperature is:%d.%d, Humidity is:%d.%d", buffer[2], buffer[3], buffer[0], buffer[1]);
 
-            // Stats Update Logic
+            // 最大最小值检测
             float temp = buffer[2] + buffer[3] / 10.0f;
             float hum = buffer[0] + buffer[1] / 10.0f;
 
-            if (temp > curr_max_temp) curr_max_temp = temp;
-            if (temp < curr_min_temp) curr_min_temp = temp;
-            if (hum > curr_max_hum) curr_max_hum = hum;
-            if (hum < curr_min_hum) curr_min_hum = hum;
+            if (first_read) {
+                curr_max_temp = temp;
+                curr_min_temp = temp;
+                curr_max_hum = hum;
+                curr_min_hum = hum;
+                first_read = false;
+            } else {
+                if (temp > curr_max_temp) curr_max_temp = temp;
+                if (temp < curr_min_temp) curr_min_temp = temp;
+                if (hum > curr_max_hum) curr_max_hum = hum;
+                if (hum < curr_min_hum) curr_min_hum = hum;
+            }
 
             // Check 5 minutes
             if (!stats_saved && (esp_timer_get_time() > 300000000)) { // 300 seconds * 1000000 us
