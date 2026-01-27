@@ -27,4 +27,8 @@ float get_min_temp(void);
 float get_max_hum(void);
 float get_min_hum(void);
 
+float get_max_temp_yesterday(void);
+float get_min_temp_yesterday(void);
+float get_max_hum_yesterday(void);
+float get_min_hum_yesterday(void);
 #endif // DHT11_H

@@ -39,11 +39,16 @@ static esp_err_t data_handler(httpd_req_t *req)
     float max_h = get_max_hum();
     float min_h = get_min_hum();
 
+    float max_t_yesterday = get_max_temp_yesterday();
+    float min_t_yesterday = get_min_temp_yesterday();
+    float max_h_yesterday = get_max_hum_yesterday();
+    float min_h_yesterday = get_min_hum_yesterday();
+
     // 生成 JSON
-    char json_response[256];
+    char json_response[512];
     snprintf(json_response, sizeof(json_response),
-             "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\", \"max_temp\": \"%.1f\", \"min_temp\": \"%.1f\", \"max_hum\": \"%.1f\", \"min_hum\": \"%.1f\"}",
-             temp_int, temp_dec, hum_int, hum_dec, max_t, min_t, max_h, min_h);
+             "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\", \"max_temp_today\": \"%.1f\", \"min_temp_today\": \"%.1f\", \"max_hum_today\": \"%.1f\", \"min_hum_today\": \"%.1f\", \"max_temp_yesterday\": \"%.1f\", \"min_temp_yesterday\": \"%.1f\", \"max_hum_yesterday\": \"%.1f\", \"min_hum_yesterday\": \"%.1f\"}",
+             temp_int, temp_dec, hum_int, hum_dec, max_t, min_t, max_h, min_h, max_t_yesterday, min_t_yesterday, max_h_yesterday, min_h_yesterday);
 
     // 发送 JSON
     return httpd_resp_send(req, json_response, strlen(json_response));

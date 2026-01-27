@@ -65,15 +65,11 @@
             }
 
             .card {
-                background: rgba(255, 255, 255, 0.1); /* 稍微亮一点的卡片背景 */
+                background: rgba(255, 255, 255, 0.05); /* 统一为深色背景 */
                 padding: 15px;
-                border-radius: 16px;
+                border-radius: 12px;
                 transition: transform 0.3s ease;
-                border: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            .card:active {
-                transform: scale(0.98); /* 触摸反馈 */
+                /* 去掉边框以保持一致 */
             }
 
             h1 {
@@ -114,25 +110,86 @@
                 font-weight: 500;
             }
 
-            .stats {
-                font-size: 0.75rem; 
-                margin-top: 8px; 
-                color: rgba(255,255,255,0.7);
-                background: rgba(0,0,0,0.2);
-                padding: 4px 8px;
-                border-radius: 10px;
-                display: inline-block;
-            }
-
-            /* 图表容器优化 */
+            /* 图表容器优化 - 统一外观 */
             .chart-wrapper {
                 background: rgba(255, 255, 255, 0.05);
-                border-radius: 16px;
+                border-radius: 12px;
                 padding: 10px;
                 width: 100%;
                 /* 关键：给图表容器一个固定高度（或者vh），防止被压扁 */
                 height: 350px; 
                 position: relative;
+            }
+
+            /* 历史数据区块 - 平铺式仪表盘布局 */
+            .history-section {
+                margin-top: 30px;
+                width: 100%;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                padding-top: 20px;
+                text-align: left;
+            }
+            
+            .section-title {
+                font-size: 1.2rem;
+                margin-bottom: 15px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .history-grid {
+                display: grid;
+                grid-template-columns: 1fr; /* 默认单列 (移动端) */
+                gap: 15px;
+            }
+
+            /* 分区内的小卡片 */
+            .history-card {
+                background: rgba(255,255,255,0.05); /* 比主卡片深一点 */
+                border-radius: 12px;
+                padding: 15px;
+            }
+
+            .history-columns-wrapper {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            .history-item {
+                display: flex;
+                flex-direction: column;
+                margin-bottom: 8px;
+            }
+            .label { font-size: 0.8rem; color: #ccc; }
+            .val   { font-size: 1.1rem; font-weight: bold; }
+            
+            .text-red { color: #ff6384; }
+            .text-blue { color: #36a2eb; }
+
+            /* 响应式适配：宽屏设备 (>= 768px) 改为横向分栏 */
+            @media (min-width: 768px) {
+                .container {
+                    max-width: 900px; /* 放宽容器限制 */
+                }
+                .history-grid {
+                    grid-template-columns: 1fr 1fr; /* 两列布局 */
+                    /* 今日与昨日在第一排, 趋势图在旁边或者下面?
+                       方案: 左边两块(今日+昨日) 堆叠, 右边放图表 */
+                    grid-template-areas: 
+                        "today chart"
+                        "yest chart";
+                }
+                /* 如果希望今日昨日并排，图表在下，不需要特殊 grid-area */
+                .history-grid {
+                   grid-template-columns: 1fr 1fr; /* 今日 | 昨日 */
+                }
+                /* 专门给图表留一个跨两列的位置 */
+                .history-chart-full {
+                    grid-column: span 2;
+                }
             }
         </style>
     </head>
@@ -148,9 +205,6 @@
                         <span id="temp-val" class="val-number">--</span>
                         <span id="unit" class="val-unit">°C</span>
                     </div>
-                    <div class="stats">
-                        Max: <span id="max-temp-val">--</span> | Min: <span id="min-temp-val">--</span>
-                    </div>
                  </div>
                 <!-- 湿度卡片 -->
                 <div class="card">
@@ -159,15 +213,73 @@
                         <span id="hum-val" class="val-number">--</span>
                         <span id="unit" class="val-unit">%</span>
                     </div>
-                    <div class="stats">
-                        Max: <span id="max-hum-val">--</span> | Min: <span id="min-hum-val">--</span>
-                    </div>
                 </div>
             </div>
 
             <!--图表显示区域 独立且固定高度-->
              <div class="chart-wrapper">
                 <canvas id="tempChart"></canvas>
+             </div>
+
+             <!-- 历史数据面板 (无需跳转，向下扩展) -->
+             <div class="history-section">
+                <div class="section-title">历史概况</div>
+                
+                <div class="history-grid">
+                    <!-- 今日统计 -->
+                    <div class="history-card">
+                        <h3>今日极值</h3>
+                        <div class="history-columns-wrapper" style="margin-top:10px;">
+                            <div class="history-item">
+                                <span class="label">最高温度</span>
+                                <span class="val text-red" id="today-max-temp">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最低温度</span>
+                                <span class="val text-red" id="today-min-temp">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最高湿度</span>
+                                <span class="val text-blue" id="today-max-hum">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最低湿度</span>
+                                <span class="val text-blue" id="today-min-hum">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 昨日统计 (模拟展示) -->
+                    <div class="history-card">
+                         <h3>昨日回顾</h3>
+                         <div class="history-columns-wrapper" style="margin-top:10px;">
+                            <div class="history-item">
+                                <span class="label">最高温度</span>
+                                <span class="val text-red" id="yesterday-max-temp">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最低温度</span>
+                                <span class="val text-red" id="yesterday-min-temp">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最高湿度</span>
+                                <span class="val text-blue" id="yesterday-max-hum">--</span>
+                            </div>
+                            <div class="history-item">
+                                <span class="label">最低湿度</span>
+                                <span class="val text-blue" id="yesterday-min-hum">--</span>
+                            </div>
+                         </div>
+                    </div>
+
+                    <!-- 一周趋势图 -->
+                    <div class="history-card history-chart-full">
+                        <h3>本周趋势</h3>
+                        <div style="height: 200px; position: relative;">
+                            <canvas id="weeklyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
              </div>
         </div>
 
@@ -247,15 +359,23 @@
                         document.getElementById("temp-val").innerText = data.temperature;
                         document.getElementById("hum-val").innerText = data.humidity;
                         
-                        // 更新统计数据
-                        if (data.max_temp && data.max_temp !== "-999.0") {
-                             document.getElementById("max-temp-val").innerText = data.max_temp;
-                             document.getElementById("min-temp-val").innerText = data.min_temp;
-                             document.getElementById("max-hum-val").innerText = data.max_hum;
-                             document.getElementById("min-hum-val").innerText = data.min_hum;
+                        // 更新昨日数据
+                        if(document.getElementById("yesterday-max-temp")) { 
+                            document.getElementById("yesterday-max-temp").innerText = data.max_temp_yesterday + "°C";
+                            document.getElementById("yesterday-min-temp").innerText = data.min_temp_yesterday + "°C";
+                            document.getElementById("yesterday-max-hum").innerText = data.max_hum_yesterday + "%";
+                            document.getElementById("yesterday-min-hum").innerText = data.min_hum_yesterday + "%";
                         }
+                        // 更新今日数据
+                        if(document.getElementById("today-max-temp")) {
+                            document.getElementById("today-max-temp").innerText = data.max_temp_today + "°C";
+                            document.getElementById("today-min-temp").innerText = data.min_temp_today + "°C";
+                            document.getElementById("today-max-hum").innerText = data.max_hum_today + "%";
+                            document.getElementById("today-min-hum").innerText = data.min_hum_today + "%";
+                        }
+                        
 
-                        // ---更新图表---
+                        // 更新图表
                         const now = new Date();
                         const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
 
@@ -291,6 +411,35 @@
             // === 启动定时器 ===
             setInterval(fetchData, 2000);
             fetchData(); // 初始执行一次
+
+            // === 初始化本周趋势图 (静态模拟数据) ===
+            const ctxWeekly = document.getElementById('weeklyChart').getContext('2d');
+            new Chart(ctxWeekly, {
+                type: 'bar', // 或者是 line
+                data: {
+                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    datasets: [{
+                        label: '最高温',
+                        data: [26, 27, 28, 26, 25, 29, 30],
+                        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: '最低温',
+                        data: [20, 21, 22, 19, 18, 22, 23],
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }, // 图例放下面省空间
+                    scales: { y: { beginAtZero: false } }
+                }
+            });
         </script>
     </body>
 </html>

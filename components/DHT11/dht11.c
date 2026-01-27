@@ -13,19 +13,24 @@
 const static char *TAG = "DHT11";
 
 // Stats
-static float saved_max_temp = -999.0;
-static float saved_min_temp = 999.0;
-static float saved_max_hum = -999.0;
-static float saved_min_hum = 999.0;
+static float saved_max_temp_today;
+static float saved_min_temp_today;
+static float saved_max_hum_today;
+static float saved_min_hum_today;
 
-static float curr_max_temp = -999.0;
-static float curr_min_temp = 999.0;
-static float curr_max_hum = -999.0;
-static float curr_min_hum = 999.0;
+static float saved_max_temp_yesterday;
+static float saved_min_temp_yesterday;
+static float saved_max_hum_yesterday;
+static float saved_min_hum_yesterday;
+
+static float curr_max_temp;
+static float curr_min_temp;
+static float curr_max_hum;
+static float curr_min_hum;
 
 static bool stats_saved = false;
 static bool first_read = true;
-static const char* NVS_NAMESPACE = "storage";
+static const char* NVS_NAMESPACE = "olddata";
 
 // 温度 湿度buffer
 static uint8_t buffer[5];
@@ -46,17 +51,15 @@ void dht11_init()
     gpio_config(&cnf);
     gpio_set_level(DHT11_GPIO, 1);
     
-    // Load stats from NVS
+    // 从NVS中读取数据
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
     if (err == ESP_OK) {
-        // NVS only supports integers well, but we can store blobs or scaled ints.
-        // For simplicity, let's store blobs for floats.
         size_t required_size = sizeof(float);
-        nvs_get_blob(my_handle, "max_temp", &saved_max_temp, &required_size);
-        nvs_get_blob(my_handle, "min_temp", &saved_min_temp, &required_size);
-        nvs_get_blob(my_handle, "max_hum", &saved_max_hum, &required_size);
-        nvs_get_blob(my_handle, "min_hum", &saved_min_hum, &required_size);
+        nvs_get_blob(my_handle, "max_temp", &saved_max_temp_yesterday, &required_size);
+        nvs_get_blob(my_handle, "min_temp", &saved_min_temp_yesterday, &required_size);
+        nvs_get_blob(my_handle, "max_hum", &saved_max_hum_yesterday, &required_size);
+        nvs_get_blob(my_handle, "min_hum", &saved_min_hum_yesterday, &required_size);
         nvs_close(my_handle);
         ESP_LOGI(TAG, "Stats loaded from NVS");
     } else {
@@ -188,14 +191,15 @@ static esp_err_t DataRead()
     return ESP_OK;
 }
 
+// 保存统计数据到 NVS
 static void save_stats_to_nvs() {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
     if (err == ESP_OK) {
-        nvs_set_blob(my_handle, "max_temp", &saved_max_temp, sizeof(float));
-        nvs_set_blob(my_handle, "min_temp", &saved_min_temp, sizeof(float));
-        nvs_set_blob(my_handle, "max_hum", &saved_max_hum, sizeof(float));
-        nvs_set_blob(my_handle, "min_hum", &saved_min_hum, sizeof(float));
+        nvs_set_blob(my_handle, "max_temp", &saved_max_temp_yesterday, sizeof(float));
+        nvs_set_blob(my_handle, "min_temp", &saved_min_temp_yesterday, sizeof(float));
+        nvs_set_blob(my_handle, "max_hum", &saved_max_hum_yesterday, sizeof(float));
+        nvs_set_blob(my_handle, "min_hum", &saved_min_hum_yesterday, sizeof(float));
         nvs_commit(my_handle);
         nvs_close(my_handle);
         ESP_LOGI(TAG, "Stats saved to NVS");
@@ -207,6 +211,14 @@ static void save_stats_to_nvs() {
 // DHT11 任务函数
 static void dht11_task(void *pvParameters)
 {
+    // 初始化时间戳
+    static int64_t last_sync_time = 0;
+    static int64_t last_day_reset_time = 0;
+
+    // 初始时间获取，避免从0开始导致的立即触发
+    last_sync_time = esp_timer_get_time();
+    last_day_reset_time = esp_timer_get_time();
+
     while (1)
     {
         memset(phase_duration, 0, sizeof(phase_duration));
@@ -227,6 +239,13 @@ static void dht11_task(void *pvParameters)
                 curr_min_temp = temp;
                 curr_max_hum = hum;
                 curr_min_hum = hum;
+
+                // 首次读取立即初始化今日数据，避免前5分钟显示为空
+                saved_max_temp_today = temp;
+                saved_min_temp_today = temp;
+                saved_max_hum_today = hum;
+                saved_min_hum_today = hum;
+                
                 first_read = false;
             } else {
                 if (temp > curr_max_temp) curr_max_temp = temp;
@@ -235,14 +254,47 @@ static void dht11_task(void *pvParameters)
                 if (hum < curr_min_hum) curr_min_hum = hum;
             }
 
-            // Check 5 minutes
-            if (!stats_saved && (esp_timer_get_time() > 300000000)) { // 300 seconds * 1000000 us
-                saved_max_temp = curr_max_temp;
-                saved_min_temp = curr_min_temp;
-                saved_max_hum = curr_max_hum;
-                saved_min_hum = curr_min_hum;
+            int64_t now = esp_timer_get_time();
+
+            // 1. 每 5 分钟同步一次 saved_today 变量 (仅内存更新，不写 Flash)
+            if ((now - last_sync_time) > 100000000LL) { // 300 seconds * 1000000 us
+                saved_max_temp_today = curr_max_temp;
+                saved_min_temp_today = curr_min_temp;
+                saved_max_hum_today = curr_max_hum;
+                saved_min_hum_today = curr_min_hum;
+                
+                last_sync_time = now;
+                ESP_LOGD(TAG, "Synced today stats");
+            }
+
+            // 2. 每 24 小时归档一次 yesterday 并重置
+            // 86400 seconds * 1000000 us = 86400000000
+            if ((now - last_day_reset_time) > 160000000LL) {
+                 // 归档到昨日
+                saved_max_temp_yesterday = curr_max_temp;
+                saved_min_temp_yesterday = curr_min_temp;
+                saved_max_hum_yesterday = curr_max_hum;
+                saved_min_hum_yesterday = curr_min_hum;
+                
+                // 保存昨日数据到 NVS
                 save_stats_to_nvs();
-                stats_saved = true;
+                
+                // 重置今日极值为当前实时值 (开始新的一天统计)
+                curr_max_temp = temp;
+                curr_min_temp = temp;
+                curr_max_hum = hum;
+                curr_min_hum = hum;
+                
+                // 同步一下 today 数据
+                saved_max_temp_today = curr_max_temp;
+                saved_min_temp_today = curr_min_temp;
+                saved_max_hum_today = curr_max_hum;
+                saved_min_hum_today = curr_min_hum;
+                
+                last_day_reset_time = now;
+                last_sync_time = now; // 顺便重置sync计时
+                
+                ESP_LOGI(TAG, "24h cycle reset - Yesterday stats saved to NVS");
             }
         }
         else
@@ -284,8 +336,14 @@ int get_humidity_dec(void)
     return buffer[1];
 }
 
-// Getters for Stats
-float get_max_temp(void) { return saved_max_temp; }
-float get_min_temp(void) { return saved_min_temp; }
-float get_max_hum(void) { return saved_max_hum; }
-float get_min_hum(void) { return saved_min_hum; }
+// 获取今日最大最小值
+float get_max_temp(void) { return saved_max_temp_today; }
+float get_min_temp(void) { return saved_min_temp_today; }
+float get_max_hum(void) { return saved_max_hum_today; }
+float get_min_hum(void) { return saved_min_hum_today; }
+
+// 获取昨日最大最小值
+float get_max_temp_yesterday(void) { return saved_max_temp_yesterday; }
+float get_min_temp_yesterday(void) { return saved_min_temp_yesterday; }
+float get_max_hum_yesterday(void) { return saved_max_hum_yesterday; }
+float get_min_hum_yesterday(void) { return saved_min_hum_yesterday; }
