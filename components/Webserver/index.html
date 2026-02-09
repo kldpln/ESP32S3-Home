@@ -359,22 +359,30 @@
                         document.getElementById("temp-val").innerText = data.temperature;
                         document.getElementById("hum-val").innerText = data.humidity;
                         
-                        // 更新昨日数据
+                        // 更新昨日数据 (改为读取 history[0])
                         if(document.getElementById("yesterday-max-temp")) { 
-                            document.getElementById("yesterday-max-temp").innerText = data.max_temp_yesterday + "°C";
-                            document.getElementById("yesterday-min-temp").innerText = data.min_temp_yesterday + "°C";
-                            document.getElementById("yesterday-max-hum").innerText = data.max_hum_yesterday + "%";
-                            document.getElementById("yesterday-min-hum").innerText = data.min_hum_yesterday + "%";
+                            if(data.history && data.history[0] && data.history[0] !== null) {
+                                const yData = data.history[0];
+                                document.getElementById("yesterday-max-temp").innerText = yData.max_temp.toFixed(1) + "°C";
+                                document.getElementById("yesterday-min-temp").innerText = yData.min_temp.toFixed(1) + "°C";
+                                document.getElementById("yesterday-max-hum").innerText = yData.max_hum.toFixed(1) + "%";
+                                document.getElementById("yesterday-min-hum").innerText = yData.min_hum.toFixed(1) + "%";
+                            } else {
+                                document.getElementById("yesterday-max-temp").innerText = "--";
+                                document.getElementById("yesterday-min-temp").innerText = "--";
+                                document.getElementById("yesterday-max-hum").innerText = "--";
+                                document.getElementById("yesterday-min-hum").innerText = "--";
+                            }
                         }
-                        // 更新今日数据
+                        
+                        // 更新今日数据 (字段名保持不变，直接赋值)
                         if(document.getElementById("today-max-temp")) {
                             document.getElementById("today-max-temp").innerText = data.max_temp_today + "°C";
                             document.getElementById("today-min-temp").innerText = data.min_temp_today + "°C";
                             document.getElementById("today-max-hum").innerText = data.max_hum_today + "%";
                             document.getElementById("today-min-hum").innerText = data.min_hum_today + "%";
                         }
-                        
-
+                
                         // 更新图表
                         const now = new Date();
                         const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
@@ -404,30 +412,84 @@
 
                         // 第二步更新：默认更新（带动画），点会从底部“飘”上来
                         myChart.update();
+
+                        // === 新增：更新历史柱状图 ===
+                        // 准备数据容器
+                        let tempLabels = [];
+                        let tempHighs = [];
+                        let tempLows = [];
+                        const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+                        if (data.history) {
+                            // 倒序遍历: 7天前 -> 昨天
+                            for (let i = 6; i >= 0; i--) {
+                                const dayData = data.history[i];
+                                if (dayData && dayData !== null) {
+                                    tempLabels.push(weekdayMap[dayData.weekday]);
+                                    tempHighs.push(dayData.max_temp);
+                                    tempLows.push(dayData.min_temp);
+                                } else {
+                                    tempLabels.push(""); // 无数据留空
+                                    tempHighs.push(0); 
+                                    tempLows.push(0);
+                                }
+                            }
+                        }
+                        // 如果 myWeeklyChart 已经初始化了，就更新它
+                        if (typeof myWeeklyChart !== 'undefined' && myWeeklyChart) {
+                            myWeeklyChart.data.labels = tempLabels;
+                            myWeeklyChart.data.datasets[0].data = tempHighs;
+                            myWeeklyChart.data.datasets[1].data = tempLows;
+                            myWeeklyChart.update();
+                        }
                     })
                     .catch(error => console.error('Error:', error));
             }
 
-            // === 启动定时器 ===
+            //时间同步函数
+            function syncTime() {
+                //获取浏览器时间并转换为秒
+                const timestamp = Math.floor(Date.now() / 1000);
+                console.log("正在同步时间:", timestamp);
+
+                //发送POST请求到服务器的时间同步接口
+                fetch('/sync_time', {
+                    method: 'POST',
+                    body: timestamp.toString() //将时间转换为字符串发送
+                })
+                .then(response => {
+                    if (response.ok) {
+                        console.log("时间同步成功");
+                    } else {
+                        console.error("时间同步失败");
+                    }
+                })
+                .catch(error => console.error('同步请求出错:', error));
+            }
+            //页面加载完成后同步
+            syncTime();
+            
+            //启动定时器
             setInterval(fetchData, 2000);
             fetchData(); // 初始执行一次
 
-            // === 初始化本周趋势图 (静态模拟数据) ===
+            // === 初始化本周趋势图 (放在最后初始化) ===
+            var myWeeklyChart; // 必须声明为全局变量，否则fetchData里访问不到
             const ctxWeekly = document.getElementById('weeklyChart').getContext('2d');
-            new Chart(ctxWeekly, {
-                type: 'bar', // 或者是 line
+            myWeeklyChart = new Chart(ctxWeekly, {
+                type: 'bar', 
                 data: {
-                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    labels: [], // 等待 fetchData 填充
                     datasets: [{
                         label: '最高温',
-                        data: [26, 27, 28, 26, 25, 29, 30],
+                        data: [],
                         backgroundColor: 'rgba(255, 99, 132, 0.5)',
                         borderColor: 'rgba(255, 99, 132, 1)',
                         borderWidth: 1
                     },
                     {
                         label: '最低温',
-                        data: [20, 21, 22, 19, 18, 22, 23],
+                        data: [],
                         backgroundColor: 'rgba(54, 162, 235, 0.5)',
                         borderColor: 'rgba(54, 162, 235, 1)',
                         borderWidth: 1
@@ -436,7 +498,7 @@
                 options: {
                     responsive: true, 
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } }, // 图例放下面省空间
+                    plugins: { legend: { position: 'bottom' } }, 
                     scales: { y: { beginAtZero: false } }
                 }
             });
