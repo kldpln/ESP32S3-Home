@@ -224,9 +224,42 @@ static void dht11_task(void *pvParameters)
             ESP_LOGI(TAG, "温度:%d.%d, 湿度:%d.%d", buffer[2], buffer[3], buffer[0], buffer[1]);
 
             // 最大最小值检测
+
+            // 定义上一次的有效读数，用于对比
+            static float last_valid_temp = -999.0;
+            static float last_valid_hum = -999.0;
+            bool valid = true; //数据有效标签
+
+            //温湿度计算
             float temp = buffer[2] + buffer[3] / 10.0f;
             float hum = buffer[0] + buffer[1] / 10.0f;
 
+            //异常值过滤
+            if(last_valid_temp != -999.0){
+                if (abs(temp - last_valid_temp) >10.0 || abs(hum - last_valid_hum) > 30.0)
+                {
+                    ESP_LOGW(TAG, "突发数据异常：温度 %.1f, 湿度 %.1f，已过滤", temp, hum);
+                    valid = false;
+                }
+            }
+
+            if(valid){
+                last_valid_temp = temp;
+                last_valid_hum = hum;
+            } else {
+                //如果数据异常但又没有历史数据可用，就暂时接受这个异常值，避免数据完全中断
+                if(last_valid_temp == -999.0){
+                    last_valid_temp = temp;
+                    last_valid_hum = hum;
+                    ESP_LOGW(TAG, "没有历史数据可用，接受当前异常值作为初始值");
+                } else {
+                    temp = last_valid_temp;
+                    hum = last_valid_hum;
+                    ESP_LOGW(TAG, "使用上次有效数据：温度 %.1f, 湿度 %.1f", temp, hum);
+                }
+            }
+            
+            //最值对比
             if (first_read) {
                 curr_max_temp = temp;
                 curr_min_temp = temp;
