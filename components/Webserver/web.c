@@ -70,8 +70,8 @@ static esp_err_t data_handler(httpd_req_t *req)
         // 如果数据无效，就填 null 或者 0，前端判断 valid 字段
         if (history[i].valid) {
              offset += sprintf(json_response + offset, 
-                "{\"day_ago\": %d, \"weekday\": %d, \"max_temp\": %.1f, \"min_temp\": %.1f, \"max_hum\": %.1f},", 
-                i + 1, history[i].weekday, history[i].max_temp, history[i].min_temp, history[i].max_hum);
+                "{\"day_ago\": %d, \"weekday\": %d, \"max_temp\": %.1f, \"min_temp\": %.1f, \"max_hum\": %.1f, \"min_hum\": %.1f},", 
+                i + 1, history[i].weekday, history[i].max_temp, history[i].min_temp, history[i].max_hum, history[i].min_hum);
         } else {
              // 无效数据传个标志
              offset += sprintf(json_response + offset, "null,");

@@ -129,7 +129,12 @@ static esp_err_t DataRead()
         }
     phase_duration[2]=esp_timer_get_time()-time_since_waiting_start;
     time_since_waiting_start=esp_timer_get_time();
+
     // 读取40位数据
+    // 进入临界区，禁止中断，确保读取过程中不被打断，临界区内若使用return语句，请确保在返回前调用portEXIT_CRITICAL(&mux)退出临界区
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;  
+    portENTER_CRITICAL(&mux);
+
     for (int j = 0; j < 5; j++) {
         for (int i = 0; i < 8; i++) {
 
@@ -137,6 +142,7 @@ static esp_err_t DataRead()
         int64_t t_start = esp_timer_get_time();
         while (gpio_get_level(DHT11_GPIO) == 0) {
             if (esp_timer_get_time() - t_start > 100) {
+                portEXIT_CRITICAL(&mux); // 退出临界区
                 ESP_LOGE(TAG, "Bit %d low too long", j*8 + i);
                 return ESP_FAIL;
             }
@@ -162,6 +168,7 @@ static esp_err_t DataRead()
     }
 }
 
+    portEXIT_CRITICAL(&mux); // 退出临界区，允许中断
  
     result=wait_pin_state(56,1);
     if (result == ESP_FAIL)
@@ -194,7 +201,7 @@ static void save_history_to_nvs() {
         nvs_set_i32(my_handle, "last_weekday", last_processed_weekday);
         nvs_commit(my_handle);
         nvs_close(my_handle);
-        ESP_LOGI(TAG, "Stats saved to NVS");
+        ESP_LOGI(TAG, "数据已保存到 NVS");
     } else {
         ESP_LOGE(TAG, "Error (%s) opening NVS handle for writing", esp_err_to_name(err));
     }
@@ -214,7 +221,7 @@ static void dht11_task(void *pvParameters)
         if (result == ESP_OK)
         {
 
-            ESP_LOGI(TAG, "Temperature is:%d.%d, Humidity is:%d.%d", buffer[2], buffer[3], buffer[0], buffer[1]);
+            ESP_LOGI(TAG, "温度:%d.%d, 湿度:%d.%d", buffer[2], buffer[3], buffer[0], buffer[1]);
 
             // 最大最小值检测
             float temp = buffer[2] + buffer[3] / 10.0f;
@@ -248,7 +255,7 @@ static void dht11_task(void *pvParameters)
                 }
                 // 跨天了！(比如从10号变11号)
                 else if (today != last_processed_weekday) {
-                    ESP_LOGI(TAG, "New Data! Rolling over to new day...");
+                    ESP_LOGI(TAG, "检测到跨天，从%d变为%d", last_processed_weekday, today);
 
                     // 数组移位
                     for (int i = 6; i > 0; i--) {
@@ -269,7 +276,7 @@ static void dht11_task(void *pvParameters)
                     save_history_to_nvs();
                     first_read = true; // 新的一天，重置极值
 
-                ESP_LOGI(TAG, "24h cycle reset - Yesterday stats saved to NVS");
+                ESP_LOGI(TAG, "24h周期重置 - 昨天的统计数据已保存到NVS");
             }
         }
     }
