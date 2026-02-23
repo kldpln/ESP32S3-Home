@@ -210,8 +210,6 @@ static void save_history_to_nvs() {
 // DHT11 任务函数
 static void dht11_task(void *pvParameters)
 {
-
-
     while (1)
     {
         memset(phase_duration, 0, sizeof(phase_duration));
@@ -279,16 +277,20 @@ static void dht11_task(void *pvParameters)
             localtime_r(&now, &timeinfo);
 
             // 只有时间同步过才处理
+            static bool time_synced_once = false; // 首次同步标志
             if (timeinfo.tm_year > (2020 - 1900)) {
-                int today = timeinfo.tm_mday;
-
-                // 刚开机还没记录过日期
-                if (last_processed_weekday == -1) {
-                    last_processed_weekday = today;
+                if (!time_synced_once){
+                    time_synced_once = true;
+                    last_processed_weekday = timeinfo.tm_mday; // 初始化为当前日期，避免开机就误判跨天
+                    ESP_LOGI("Time", "时间同步恢复，重置日期锚点，暂不结算历史数据");
+                    first_read = true; // 时间同步后重置极值，避免历史数据被新一天的异常值污染
                 }
+
+                else{
+                int today = timeinfo.tm_mday;
                 // 跨天了！(比如从10号变11号)
-                else if (today != last_processed_weekday) {
-                    ESP_LOGI(TAG, "检测到跨天，从%d变为%d", last_processed_weekday, today);
+                    if (today != last_processed_weekday && last_processed_weekday != -1) {
+                    ESP_LOGI("Time", "检测到跨天，从%d变为%d", last_processed_weekday, today);
 
                     // 数组移位
                     for (int i = 6; i > 0; i--) {
@@ -309,10 +311,12 @@ static void dht11_task(void *pvParameters)
                     save_history_to_nvs();
                     first_read = true; // 新的一天，重置极值
 
-                ESP_LOGI(TAG, "24h周期重置 - 昨天的统计数据已保存到NVS");
+                ESP_LOGI("Time", "24h周期重置 - 昨天的统计数据已保存到NVS");
+                    
+                    }
+                }
             }
         }
-    }
         else
         {
             ESP_LOGE(TAG, "Reading data failed.");
