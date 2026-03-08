@@ -14,18 +14,9 @@
                 box-sizing: border-box;
             }
 
-            /* 使用伪元素修复移动端背景白边和固定问题 */
-            body::before {
-                content: "";
-                position: fixed;
-                top: 0; 
-                left: 0; 
-                width: 100%; 
-                height: 100%;
-                background-image: url(back.jpg);
-                background-size: cover;
-                background-position: center;
-                z-index: -1; /* 置于底层 */
+            html {
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                min-height: 100%;
             }
 
             body {
@@ -48,6 +39,14 @@
                 box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
                 width: 100%;
                 max-width: 600px;
+                /* 防止内容撑开容器 */
+                overflow: hidden; 
+            }
+            /* 修复移动端padding过大问题 */
+            @media (max-width: 480px) {
+                .container {
+                    padding: 15px; 
+                }
             }
             
             .cards-wrapper {
@@ -150,6 +149,9 @@
                 background: rgba(255,255,255,0.05); /* 比主卡片深一点 */
                 border-radius: 12px;
                 padding: 15px;
+                /* 关键修复：防止Grid子项被内容撑大导致溢出 */
+                min-width: 0;
+                overflow: hidden; /* 确保内容不会溢出圆角 */
             }
 
             .history-columns-wrapper {
@@ -195,7 +197,7 @@
     </head>
     <body>
         <div class="container">
-            <h1>Legdema's Home</h1>
+            <h1>Legdema Home</h1>
 
             <div class="cards-wrapper">
                 <!-- 温度卡片 -->

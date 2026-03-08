@@ -13,9 +13,9 @@ bool time_sync_done = false;
 extern const uint8_t _binary_index_html_start[];
 extern const uint8_t _binary_index_html_end[];
 
-// 嵌入 JPG 图片
-extern const uint8_t _binary_back_jpg_start[];
-extern const uint8_t _binary_back_jpg_end[];
+// 嵌入 JPG 图片 (已移除)
+/* extern const uint8_t _binary_back_jpg_start[];
+extern const uint8_t _binary_back_jpg_end[]; */
 
 //嵌入 chart.js 库
 extern const uint8_t _binary_chart_js_gz_start[];
@@ -95,7 +95,9 @@ static esp_err_t data_handler(httpd_req_t *req)
     return ESP_OK;   
 }
 
-// 处理back.jpg图片请求
+
+// (已移除) 处理back.jpg图片请求
+/*
 static esp_err_t jpg_handler(httpd_req_t *req)
 {
     // 设置响应类型为image/jpeg
@@ -103,6 +105,7 @@ static esp_err_t jpg_handler(httpd_req_t *req)
     // 发送JPG图片内容
     return httpd_resp_send(req, (const char *)_binary_back_jpg_start, _binary_back_jpg_end - _binary_back_jpg_start);
 }
+*/
 
 //处理chart.js请求
 static esp_err_t chart_handler(httpd_req_t *req)
@@ -196,7 +199,8 @@ httpd_handle_t start_webserver(void)
         // 注册uri的处理函数
         httpd_register_uri_handler(server, &index_uri);
 
-        // 定义JPG图片的URI
+        // (已移除) 定义JPG图片的URI
+        /*
         httpd_uri_t jpg_uri = {
             .uri       = "/back.jpg",
             .method    = HTTP_GET,
@@ -205,6 +209,7 @@ httpd_handle_t start_webserver(void)
         };
         // 注册JPG处理函数
         httpd_register_uri_handler(server, &jpg_uri);
+        */
 
         // 定义数据API的URI
         httpd_uri_t data_uri = {
