@@ -7,7 +7,8 @@
 #include "esp_rom_sys.h"
 #include "nvs_flash.h"
 #include "nvs.h"
-#include "dht11.h"
+#include "data_process.h"
+#include "dht11_rmt.h" // 引入 RMT 驱动
 
 #define DHT11_GPIO 7  // DHT11引脚定义
 const static char *TAG = "DHT11";
@@ -27,22 +28,12 @@ static const char* NVS_NAMESPACE = "history";
 
 // 实时温度 湿度buffer
 static uint8_t buffer[5];
-static uint8_t prebuffer[5];
-static int64_t phase_duration[3] = {0};
-static int64_t bit_duration_low[40] = {0};
-static int64_t bit_duration_high[40] = {0};
 
 // DHT11 初始化引脚，等待1s上电时间
-void dht11_init()
+void data_process_init()
 {
-    gpio_config_t cnf = {
-        .mode = GPIO_MODE_OUTPUT_OD,
-        .pin_bit_mask = 1ULL << DHT11_GPIO,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE
-    };
-    gpio_config(&cnf);
-    gpio_set_level(DHT11_GPIO, 1);
+    // 初始化 RMT 底层驱动代替原有的 GPIO 手动配置
+    dht11_rmt_init((gpio_num_t)DHT11_GPIO);
     
     // 从NVS中读取数据
     nvs_handle_t my_handle;
@@ -63,135 +54,6 @@ void dht11_init()
     vTaskDelay(1200 / portTICK_PERIOD_MS);
 }
 
-/*
-timeout单位是us
-*/
-static esp_err_t wait_pin_state(uint32_t timeout, int expected_pin_state)
-{
-    int64_t start_time;
-    start_time = esp_timer_get_time();
-    while (esp_timer_get_time() - start_time <= timeout)
-    {
-        if (gpio_get_level(DHT11_GPIO) == expected_pin_state)
-            return ESP_OK;
-        esp_rom_delay_us(1);
-    }
-    return ESP_FAIL;
-}
-
-// 读取数据函数
-static esp_err_t DataRead()
-{
-    int64_t time_since_waiting_start;
-    esp_err_t result = ESP_FAIL;
-    memset(prebuffer, 0, sizeof(prebuffer));
-    // 发送开始信号
-    gpio_set_direction(DHT11_GPIO, GPIO_MODE_OUTPUT_OD);
-    // 起始前先确保总线为高
-    gpio_set_level(DHT11_GPIO, 1);
-    esp_rom_delay_us(10);         // 小等一下，10us
-
-    // 起始信号：拉低至少 18ms，这里给 20ms
-    gpio_set_level(DHT11_GPIO, 0);
-    vTaskDelay(20 / portTICK_PERIOD_MS);  // 20ms
-
-    // 释放总线：拉高 20~40us
-    gpio_set_level(DHT11_GPIO, 1);
-    esp_rom_delay_us(30);         // 30us
-
-    // 转为输入，交给从机
-    gpio_set_direction(DHT11_GPIO, GPIO_MODE_INPUT);
-
-    time_since_waiting_start = esp_timer_get_time();
-
-    result=wait_pin_state(120,0);  //
-    if(result == ESP_FAIL)
-    {
-        ESP_LOGE(TAG, "Phase A Fail, slave not set LOW.");
-        return ESP_FAIL;
-    }
-    phase_duration[0]=esp_timer_get_time()-time_since_waiting_start;
-    time_since_waiting_start=esp_timer_get_time();
-    /*等从机拉低总线83us，再拉高87us*/
-    result=wait_pin_state(120,1);
-        if (result == ESP_FAIL)
-        {
-            ESP_LOGE(TAG, "Phase B Fail, slave not set HIGH.");
-            return ESP_FAIL;
-        }
-    phase_duration[1]=esp_timer_get_time()-time_since_waiting_start;
-    time_since_waiting_start=esp_timer_get_time();
-    result = wait_pin_state(120, 0);
-        if (result == ESP_FAIL)
-        {
-            ESP_LOGE(TAG, "Phase C Fail, slave not set LOW to start sending.");
-            return ESP_FAIL;
-        }
-    phase_duration[2]=esp_timer_get_time()-time_since_waiting_start;
-    time_since_waiting_start=esp_timer_get_time();
-
-    // 读取40位数据
-    // 进入临界区，禁止中断，确保读取过程中不被打断，临界区内若使用return语句，请确保在返回前调用portEXIT_CRITICAL(&mux)退出临界区
-    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;  
-    portENTER_CRITICAL(&mux);
-
-    for (int j = 0; j < 5; j++) {
-        for (int i = 0; i < 8; i++) {
-
-        // 等低电平结束（bit 前导低电平），加超时保护
-        int64_t t_start = esp_timer_get_time();
-        while (gpio_get_level(DHT11_GPIO) == 0) {
-            if (esp_timer_get_time() - t_start > 100) {
-                portEXIT_CRITICAL(&mux); // 退出临界区
-                ESP_LOGE(TAG, "Bit %d low too long", j*8 + i);
-                return ESP_FAIL;
-            }
-            esp_rom_delay_us(1);
-        }
-        bit_duration_low[j*8+i] = esp_timer_get_time() - time_since_waiting_start;
-
-        // 测高电平持续时间
-        time_since_waiting_start = esp_timer_get_time();
-        while (gpio_get_level(DHT11_GPIO) == 1) {
-            if (esp_timer_get_time() - time_since_waiting_start > 100) {
-                break; // 超过 100us 就退出
-            }
-            esp_rom_delay_us(1);
-        }
-
-        int64_t high_time = esp_timer_get_time() - time_since_waiting_start;
-        bit_duration_high[j*8+i] = high_time;
-
-        if (high_time > 40) {
-            prebuffer[j] |= (1U << (7 - i)); // 1
-        }
-    }
-}
-
-    portEXIT_CRITICAL(&mux); // 退出临界区，允许中断
- 
-    result=wait_pin_state(56,1);
-    if (result == ESP_FAIL)
-    {
-        ESP_LOGE(TAG, "Data is all read.But CAN not set high.");
-        return ESP_FAIL;
-    }
-
-    // 量程外值检查
-    float hum = prebuffer[0] + prebuffer[1] / 10.0f;
-    float temp = prebuffer[2] + prebuffer[3] / 10.0f;
-
-    // 量程范围: Temp -20~60, Hum 5~95
-    if ((temp >= -20 && temp <= 60) && (hum >= 5 && hum <= 90)) {
-        memcpy(buffer, prebuffer, sizeof(buffer));
-    } else {
-        ESP_LOGE(TAG, "Data out of range! Temp: %.1f, Hum: %.1f", temp, hum);
-        return ESP_FAIL;
-    }
-
-    return ESP_OK;
-}
-
 // 保存统计数据到 NVS
 static void save_history_to_nvs() {
     nvs_handle_t my_handle;
@@ -208,18 +70,21 @@ static void save_history_to_nvs() {
 }
 
 // DHT11 任务函数
-static void dht11_task(void *pvParameters)
+static void data_process_task(void *pvParameters)
 {
     while (1)
     {
-        memset(phase_duration, 0, sizeof(phase_duration));
-        memset(bit_duration_low, 0, sizeof(bit_duration_low));
-        memset(bit_duration_high, 0, sizeof(bit_duration_high));
-        esp_err_t result = DataRead();
+        dht11_reading_t rmt_data;
+        esp_err_t result = dht11_rmt_read(&rmt_data);
+        
         if (result == ESP_OK)
         {
-
-            ESP_LOGI(TAG, "温度:%d.%d, 湿度:%d.%d", buffer[2], buffer[3], buffer[0], buffer[1]);
+            // 将 RMT 读到的浮点数转换为原来 buffer 的格式（整数和小数分离）
+            // 注意：这种转换是为了兼容你后端取数据的接口
+            buffer[2] = (int)rmt_data.temperature;                           // 温度整数
+            buffer[3] = (int)((rmt_data.temperature - buffer[2]) * 10);      // 温度小数
+            buffer[0] = (int)rmt_data.humidity;                              // 湿度整数
+            buffer[1] = (int)((rmt_data.humidity - buffer[0]) * 10);         // 湿度小数
 
             // 最大最小值检测
 
@@ -228,9 +93,9 @@ static void dht11_task(void *pvParameters)
             static float last_valid_hum = -999.0;
             bool valid = true; //数据有效标签
 
-            //温湿度计算
-            float temp = buffer[2] + buffer[3] / 10.0f;
-            float hum = buffer[0] + buffer[1] / 10.0f;
+            //温湿度计算 (直接使用 rmt 读到的数据，更加精确)
+            float temp = rmt_data.temperature;
+            float hum = rmt_data.humidity;
 
             //异常值过滤
             if(last_valid_temp != -999.0){
@@ -326,10 +191,10 @@ static void dht11_task(void *pvParameters)
 }
 
 // 启动 DHT11 读取任务
-void dht11_start_task(void)
+void data_process_start_task(void)
 {
     // 固定到核心 1，高优先级 5
-    xTaskCreatePinnedToCore(dht11_task, "dht11_task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(data_process_task, "data_process_task", 4096, NULL, 5, NULL, 1);
 }
 
 // 获取温度（整数部分）

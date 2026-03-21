@@ -1,14 +1,14 @@
-#ifndef DHT11_H
-#define DHT11_H
+#ifndef DATA_PROCESS_H
+#define DATA_PROCESS_H
 
 #include "esp_err.h"
 #include <time.h>
 #include <stdbool.h>
 // 初始化 DHT11
-void dht11_init(void);
+void data_process_init(void);
 
 // 启动 DHT11 读取任务
-void dht11_start_task(void);
+void data_process_start_task(void);
 
 // 获取温度
 int get_temperature_int(void);

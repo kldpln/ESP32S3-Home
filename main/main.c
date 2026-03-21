@@ -6,7 +6,7 @@
 #include "esp_wifi.h" // 包含ESP32 Wi-Fi功能库
 #include "web.h" // 包含webserver头文件
 #include "ap.h" // 包含AP头文件
-#include "dht11.h" // 包含DHT11头文件
+#include "data_process.h" // 包含DHT11头文件
 
 // 主函数
 void app_main()
@@ -19,9 +19,9 @@ void app_main()
     start_webserver();
 
     // 初始化 DHT11
-    dht11_init();
+    data_process_init();
     // 启动 DHT11 读取任务
-    dht11_start_task();
+    data_process_start_task();
 }
 
 
