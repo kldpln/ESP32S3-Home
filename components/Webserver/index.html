@@ -171,6 +171,122 @@
             .text-red { color: #ff6384; }
             .text-blue { color: #36a2eb; }
 
+            /* 新增：弹窗模态框样式 */
+            .modal-overlay {
+                display: none; /* 默认隐藏 */
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(5px);
+                -webkit-backdrop-filter: blur(5px);
+                z-index: 1000;
+                justify-content: center;
+                align-items: center;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .modal-overlay.show {
+                display: flex;
+                opacity: 1;
+            }
+
+            .modal-content {
+                background: rgba(30, 45, 80, 0.95);
+                padding: 30px;
+                border-radius: 16px;
+                width: 90%;
+                max-width: 400px;
+                position: relative;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                transform: translateY(-20px);
+                transition: transform 0.3s ease;
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+
+            .modal-overlay.show .modal-content {
+                transform: translateY(0);
+            }
+
+            .close-btn {
+                position: absolute;
+                top: 15px;
+                right: 20px;
+                font-size: 1.5rem;
+                cursor: pointer;
+                opacity: 0.7;
+                transition: opacity 0.2s;
+            }
+
+            .close-btn:hover { opacity: 1; }
+
+            .input-group {
+                margin-bottom: 20px;
+                text-align: left;
+            }
+
+            .input-group label {
+                display: block;
+                margin-bottom: 8px;
+                font-size: 0.9rem;
+                color: #ccc;
+            }
+
+            .input-group input {
+                width: 100%;
+                padding: 12px;
+                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.2);
+                background: rgba(0,0,0,0.2);
+                color: white;
+                font-size: 1rem;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+
+            .input-group input:focus {
+                border-color: #36a2eb;
+            }
+
+            .submit-btn {
+                width: 100%;
+                padding: 12px;
+                background: linear-gradient(135deg, #36a2eb 0%, #1e3c72 100%);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 1.1rem;
+                font-weight: bold;
+                cursor: pointer;
+                transition: box-shadow 0.2s;
+            }
+
+            .submit-btn:hover {
+                box-shadow: 0 4px 15px rgba(54, 162, 235, 0.4);
+            }
+
+            .settings-btn {
+                background: none;
+                border: none;
+                color: white;
+                cursor: pointer;
+                opacity: 0.7;
+                transition: opacity 0.2s, transform 0.2s;
+                padding: 5px;
+            }
+
+            .settings-btn:hover {
+                opacity: 1;
+                transform: scale(1.1) rotate(15deg);
+            }
+
+            .status-msg {
+                margin-top: 15px;
+                font-size: 0.9rem;
+                text-align: center;
+                display: none;
+            }
+
             /* 响应式适配：宽屏设备 (>= 768px) 改为横向分栏 */
             @media (min-width: 768px) {
                 .container {
@@ -196,8 +312,38 @@
         </style>
     </head>
     <body>
+        <!-- 新增：Wi-Fi配网弹窗模态框 -->
+        <div id="wifiModal" class="modal-overlay">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeWifiModal()">&times;</span>
+                <h3>连接到新网络</h3>
+                <p style="margin-bottom: 15px; font-size: 0.9rem; color: #ddd;">请输入要连接的 Wi-Fi 名称和密码</p>
+                <form id="wifiForm" onsubmit="submitWifi(event)">
+                    <div class="input-group">
+                        <label for="ssid">Wi-Fi 名称 (SSID)</label>
+                        <input type="text" id="ssid" required placeholder="请输入路由器的名称">
+                    </div>
+                    <div class="input-group">
+                        <label for="password">Wi-Fi 密码</label>
+                        <input type="password" id="password" required placeholder="请输入密码">
+                    </div>
+                    <button type="submit" class="submit-btn" id="wifiSubmitBtn">连接</button>
+                    <p id="wifiStatus" class="status-msg"></p>
+                </form>
+            </div>
+        </div>
+
         <div class="container">
-            <h1>Legdema Home</h1>
+            <!-- 头部区域采用 Flex 布局，让标题和设置按钮在一行 -->
+            <div class="header-area" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h1 style="margin-bottom: 0;">Legdema Home</h1>
+                <button class="settings-btn" onclick="openWifiModal()" title="网络设置">
+                    <!-- 这里可以使用一个简单的齿轮或 Wi-Fi 图标 SVG -->
+                    <svg t="1683900000000" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor">
+                        <path d="M738.133333 392.533333a286.72 286.72 0 0 1 143.786667 36.693334 34.133333 34.133333 0 0 1-35.84 58.026666 218.453333 218.453333 0 0 0-215.893333 1.28 34.133333 34.133333 0 0 1-35.84-58.453333 286.72 286.72 0 0 1 143.786666-37.546667zM512 618.666667A106.666667 106.666667 0 1 1 512 832a106.666667 106.666667 0 0 1 0-213.333334z m338.346667-422.4a494.506667 494.506667 0 0 1 202.666666 43.52 34.133333 34.133333 0 1 1-26.026666 63.146666 426.24 426.24 0 0 0-464.213334 5.546667 34.133333 34.133333 0 0 1-37.546666-56.32 494.933333 494.933333 0 0 1 325.12-55.893333z" p-id="1234"></path>
+                    </svg>
+                </button>
+            </div>
 
             <div class="cards-wrapper">
                 <!-- 温度卡片 -->
@@ -474,6 +620,77 @@
             //启动定时器
             setInterval(fetchData, 2000);
             fetchData(); // 初始执行一次
+
+            // === 新增：Wi-Fi 配网弹窗逻辑 ===
+            function openWifiModal() {
+                const modal = document.getElementById("wifiModal");
+                modal.style.display = "flex";
+                // 触发重绘以实现过渡动画
+                setTimeout(() => modal.classList.add("show"), 10);
+                document.getElementById("wifiStatus").style.display = "none";
+            }
+
+            function closeWifiModal() {
+                const modal = document.getElementById("wifiModal");
+                modal.classList.remove("show");
+                setTimeout(() => modal.style.display = "none", 300);
+            }
+
+            function submitWifi(event) {
+                event.preventDefault(); // 阻止表单默认跳转
+                
+                const ssid = document.getElementById("ssid").value;
+                const password = document.getElementById("password").value;
+                const btn = document.getElementById("wifiSubmitBtn");
+                const status = document.getElementById("wifiStatus");
+                
+                btn.innerText = "正在下发...";
+                btn.disabled = true;
+                btn.style.opacity = "0.7";
+                
+                fetch('/wifi_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ssid: ssid, password: password })
+                })
+                .then(response => response.json()) // 修改：解析 JSON 响应
+                .then(data => {
+                    status.style.display = "block";
+                    if (data.status === "ok") {
+                        status.style.color = "#4ade80";
+                        status.innerText = "连接成功！设备IP: " + data.ip;
+                        // 这里可以让弹窗多停几秒让用户看到 IP
+                        setTimeout(() => {
+                            closeWifiModal();
+                            btn.innerText = "连接";
+                            btn.disabled = false;
+                            btn.style.opacity = "1";
+                            document.getElementById("wifiForm").reset();
+                        }, 5000); // 改为5秒后关闭
+                    } else if(data.status === "timeout") {
+                        status.style.color = "#fbbf24";
+                        status.innerText = "连接超时，可能密码错误或网络不佳";
+                        btn.innerText = "重新连接";
+                        btn.disabled = false;
+                        btn.style.opacity = "1";
+                    } else {
+                        throw new Error('网络请求失败');
+                    }
+                })
+                .catch(error => {
+                    status.style.display = "block";
+                    status.style.color = "#ef4444";
+                    status.innerText = "下发失败，请重试";
+                    btn.innerText = "连接";
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                });
+            }
+
+            // 点击模态框背景关闭弹窗
+            document.getElementById("wifiModal").addEventListener("click", function(e) {
+                if (e.target === this) closeWifiModal();
+            });
 
             // === 初始化本周趋势图 (放在最后初始化) ===
             var myWeeklyChart; // 必须声明为全局变量，否则fetchData里访问不到

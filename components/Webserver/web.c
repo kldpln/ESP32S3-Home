@@ -4,10 +4,16 @@
 #include "sys/time.h"
 #include "time.h"
 #include "esp_log.h"
+#include "cJSON.h" // 引入 cJSON 库来解析网页发来的账号密码
+#include "esp_wifi.h" // 引入 WiFi 库以应用新的配置
+#include "nvs_flash.h" // 引入 NVS 保存 Wi-Fi 账号密码
+#include "nvs.h"
 
-
-//时间设置标志位
+// 定义时间同步标志位在开头
 bool time_sync_done = false;
+
+//声明一下静态的TAG
+static const char *TAG = "WEBSERVER";
 
 // 嵌入资源（命名由 objcopy 自动生成）
 extern const uint8_t _binary_index_html_start[];
@@ -162,7 +168,7 @@ static esp_err_t time_sync_handler(httpd_req_t *req)
         localtime_r(&now, &timeinfo);
         char strftime_buf[64];
         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-        ESP_LOGI("Time Sync", "系统时间同步为: %s", strftime_buf);
+        ESP_LOGI(TAG, "系统时间同步为: %s", strftime_buf);
 
         //发送成功响应
         const char* response = "时间同步成功";
@@ -173,7 +179,107 @@ static esp_err_t time_sync_handler(httpd_req_t *req)
         //时间戳无效，发送错误响应
         const char* response = "时间戳无效";
         return httpd_resp_send(req, response, strlen(response));
-     }  
+    }  
+}
+
+// 处理 Wi-Fi 配置请求的处理器 
+static esp_err_t wifi_config_handler(httpd_req_t *req)
+{
+    char buffer[200]; // 用于存放接收的 JSON 字符串
+    int ret, remaining = req->content_len;
+
+    if (remaining >= sizeof(buffer)) {
+        ESP_LOGE(TAG, "JSON 数据太大");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    // 接收 HTTP 请求体数据
+    ret = httpd_req_recv(req, buffer, remaining);
+    if (ret <= 0) {
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            httpd_resp_send_408(req);
+        }
+        return ESP_FAIL;
+    }
+    buffer[ret] = '\0'; // 结束符
+
+    ESP_LOGI(TAG, "收到配网数据: %s", buffer);
+
+    // 解析 JSON
+    cJSON *root = cJSON_Parse(buffer);
+    if (root == NULL) {
+        ESP_LOGE(TAG, "JSON 解析失败");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    cJSON *ssid_item = cJSON_GetObjectItem(root, "ssid");
+    cJSON *pwd_item = cJSON_GetObjectItem(root, "password");
+
+    if (ssid_item && pwd_item && cJSON_IsString(ssid_item) && cJSON_IsString(pwd_item)) {
+        // 成功提取 SSID 和 密码
+        const char *new_ssid = ssid_item->valuestring;
+        const char *new_pwd = pwd_item->valuestring;
+        ESP_LOGI(TAG, "准备连接 -> SSID: %s, Password: %s", new_ssid, new_pwd);
+        // 保存到 NVS 
+        nvs_handle_t my_handle;
+        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+        if (err == ESP_OK) {
+            nvs_set_str(my_handle, "wifi_ssid", new_ssid);
+            nvs_set_str(my_handle, "wifi_pass", new_pwd);
+            nvs_commit(my_handle);
+            nvs_close(my_handle);
+            ESP_LOGI(TAG, "Wi-Fi 信息已保存至 NVS");
+        } else {
+            ESP_LOGE(TAG, "NVS 打开失败，未保存 Wi-Fi 信息");
+        }
+        // 应用新的 STA 配置
+        wifi_config_t sta_config = {0};
+        strncpy((char *)sta_config.sta.ssid, new_ssid, sizeof(sta_config.sta.ssid) - 1);
+        strncpy((char *)sta_config.sta.password, new_pwd, sizeof(sta_config.sta.password) - 1);
+        
+        // 断开现有的连接 -> 重新设置参数 -> 重新连接
+        esp_wifi_disconnect();
+        esp_wifi_set_config(WIFI_IF_STA, &sta_config);
+        esp_wifi_connect();
+
+        // 等待获取 IP 地址 (最多等 8 秒)
+        esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        esp_netif_ip_info_t ip_info;
+        int retry_count = 0;
+        bool got_ip = false;
+        
+        while (retry_count < 80) { // 80 * 100ms = 8s
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            if (netif_sta && esp_netif_get_ip_info(netif_sta, &ip_info) == ESP_OK) {
+                if (ip_info.ip.addr != 0) { // IP 不为 0 说明拿到了
+                    got_ip = true;
+                    break;
+                }
+            }
+            retry_count++;
+        }
+
+        // 发送带 IP 的响应
+        char response[128];
+        if (got_ip) {
+            snprintf(response, sizeof(response), "{\"status\":\"ok\", \"ip\":\"" IPSTR "\"}", IP2STR(&ip_info.ip));
+        } else {
+            snprintf(response, sizeof(response), "{\"status\":\"timeout\"}");
+        }
+        
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, response, strlen(response));
+    } else {
+        ESP_LOGE(TAG, "JSON 字段不完整");
+        httpd_resp_send_500(req);
+    }
+
+    // 释放 JSON 对象内存
+    cJSON_Delete(root);
+
+    return ESP_OK;
 }
 // 定义一个函数，用于启动web服务器
 httpd_handle_t start_webserver(void)
@@ -240,6 +346,15 @@ httpd_handle_t start_webserver(void)
         };
         // 注册时间同步处理函数
         httpd_register_uri_handler(server, &time_sync_uri);
+
+        // 注册配网接口的 URI
+        httpd_uri_t wifi_config_uri = {
+            .uri       = "/wifi_config",
+            .method    = HTTP_POST,   // 前端用 POST 提交
+            .handler   = wifi_config_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &wifi_config_uri);
     }
 
     // 返回httpd的句柄
