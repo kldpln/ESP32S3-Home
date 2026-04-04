@@ -7,6 +7,7 @@
 #include "web.h" // 包含webserver头文件
 #include "ap.h" // 包含AP头文件
 #include "data_process.h" // 包含DHT11头文件
+#include "my_mdns.h" // 包含mDNS头文件
 
 // 主函数
 void app_main()
@@ -17,6 +18,9 @@ void app_main()
     wifi_init_softap();
     // 启动web服务器
     start_webserver();
+
+    // 启动 mDNS 局域网发现广播
+    start_mdns_service();
 
     // 初始化 DHT11
     data_process_init();
