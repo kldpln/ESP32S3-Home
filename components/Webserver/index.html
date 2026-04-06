@@ -364,6 +364,18 @@
                 </div>
             </div>
 
+            <!-- 温度报警设置区域 -->
+            <div class="card" style="margin-bottom: 20px;">
+                <h2 style="font-size: 1.1rem; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">🌡️ 报警设置</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <span style="font-size: 0.95rem;">温度过高报警阈值 (℃)</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="number" id="alarmThresholdInput" value="30.0" step="0.5" style="width: 70px; padding: 6px; border-radius: 6px; border: none; text-align: center; background: rgba(255,255,255,0.2); color: white; outline: none; transition: background 0.3s;" onfocus="this.style.background='rgba(255,255,255,0.3)'" onblur="this.style.background='rgba(255,255,255,0.2)'">
+                        <button onclick="saveAlarmThreshold()" style="padding: 6px 12px; border-radius: 6px; border: none; background: #FF5E5B; color: white; cursor: pointer; font-weight: bold; font-size: 0.85rem; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">保存</button>
+                    </div>
+                </div>
+            </div>
+
             <!--图表显示区域 独立且固定高度-->
              <div class="chart-wrapper">
                 <canvas id="tempChart"></canvas>
@@ -436,6 +448,58 @@
 
         <!-- 温湿度文字显示脚本模块-->
         <script>
+            // ======= 报警控制变量 ======= //
+            let alarmThreshold = 30.0;
+            let isAlarmActive = false; // 记录报警状态，防止一直接收轰炸通知
+            let isFirstLoad = true;    // 标记是否第一次加载数据
+
+            document.addEventListener("DOMContentLoaded", function () {
+                const thresholdInput = document.getElementById("alarmThresholdInput");
+                if(thresholdInput) {
+                    thresholdInput.addEventListener("change", function(e) {
+                        alarmThreshold = parseFloat(e.target.value) || 30.0;
+                        isAlarmActive = false; // 修改阈值后重置状态
+                    });
+                }
+            });
+
+            // 保存报警阈值到后端的函数
+            function saveAlarmThreshold() {
+                const inputVal = document.getElementById("alarmThresholdInput").value;
+                const newThreshold = parseFloat(inputVal);
+                if (isNaN(newThreshold)) {
+                    alert("请输入有效的温度数字！");
+                    return;
+                }
+                
+                // 更新前端本地变量
+                alarmThreshold = newThreshold;
+                isAlarmActive = false;
+                
+                // POST 请求发送给 ESP32 后端
+                fetch('/set_alarm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold: newThreshold })
+                })
+                .then(res => res.json())
+                .then(resData => {
+                    if (resData.status === "ok") {
+                        if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
+                            window.AndroidBridge.triggerAlert("设置成功", "报警阈值已保存为 " + newThreshold + "℃");
+                        } else {
+                            alert("报警阈值已成功保存到设备！");
+                        }
+                    } else {
+                         alert("保存失败，请稍后重试");
+                    }
+                })
+                .catch(err => {
+                    console.error('Save Alarm Error:', err);
+                    alert("保存失败：网络连接异常");
+                });
+            }
+
             // === 初始化图表配置 ===
             const ctx = document.getElementById('tempChart').getContext('2d');
             const myChart = new Chart(ctx, {
@@ -503,10 +567,43 @@
                 fetch('/data')
                     .then(response => response.json())
                     .then(data => {
+                        // 如果后端传回了正确的保存阈值，且是初次加载页面，则将其更新到UI和本地变量中
+                        if (data.alarmThreshold && isFirstLoad) {
+                            let serverThreshold = parseFloat(data.alarmThreshold);
+                            if (!isNaN(serverThreshold)) {
+                                alarmThreshold = serverThreshold;
+                                document.getElementById("alarmThresholdInput").value = serverThreshold;
+                            }
+                            isFirstLoad = false; // 此后不再覆盖用户的临时界面输入
+                        }
+
                         // ---更新卡片文字---
                         document.getElementById("temp-val").innerText = data.temperature;
                         document.getElementById("hum-val").innerText = data.humidity;
-                        
+
+                        // ====== 新增：温度过高报警 ======
+                        let currentTemp = parseFloat(data.temperature);
+                        if (!isNaN(currentTemp)) {
+                            // 当当前温度超过设定阈值
+                            if (currentTemp > alarmThreshold) {
+                                // 确认之前是否已经弹出过警告
+                                if (!isAlarmActive) {
+                                    isAlarmActive = true; // 锁定报警状态
+                                    if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
+                                        window.AndroidBridge.triggerAlert(
+                                            "温度过高警告！", 
+                                            "当前温度已达到 " + currentTemp + "℃，请注意！"
+                                        );
+                                    } else {
+                                        console.log("【浏览器模拟提醒】：温度过高！当前温度 " + currentTemp + "℃");
+                                    }
+                                }
+                            } else {
+                                // 如果温度降下来了，解除报警锁定，以便下次还能正常通知
+                                isAlarmActive = false;
+                            }
+                        }
+
                         // 更新昨日数据 (改为读取 history[0])
                         if(document.getElementById("yesterday-max-temp")) { 
                             if(data.history && data.history[0] && data.history[0] !== null) {
@@ -542,8 +639,8 @@
                         myChart.data.datasets[0].data.push(0);
                         myChart.data.datasets[1].data.push(0);
 
-                        // 保持图表不至于太挤，只保留最近10个点
-                        if (myChart.data.labels.length > 10) {
+                          // 保持图表不至于太挤，只保留最近5个点
+                          if (myChart.data.labels.length > 5) {
                             myChart.data.labels.shift(); // 删掉最旧的时间
                             myChart.data.datasets[0].data.shift(); // 删掉最旧的温度
                             myChart.data.datasets[1].data.shift(); // 删掉最旧的湿度
@@ -618,7 +715,7 @@
             syncTime();
             
             //启动定时器
-            setInterval(fetchData, 2000);
+            setInterval(fetchData, 3000); // 改为3秒刷新一次
             fetchData(); // 初始执行一次
 
             // === 新增：Wi-Fi 配网弹窗逻辑 ===

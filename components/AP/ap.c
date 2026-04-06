@@ -7,8 +7,30 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "esp_mac.h" // 包含 MACSTR 和 MAC2STR 宏的头文件
+#include "esp_sntp.h"
+#include <time.h>
 
 static const char *TAG = "WIFI_APSTA";
+
+// 定义全局标志位（默认未通过网络同步）
+bool g_is_ntp_synced = false;
+
+// 当 SNTP 成功获取到时间时的回调函数
+void time_sync_notification_cb(struct timeval *tv)
+{
+    // 设置时区为东八区 (如果尚未设置的话)
+    setenv("TZ", "CST-8", 1);
+    tzset();
+
+    time_t now = tv->tv_sec;
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    char strftime_buf[64];
+    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+
+    ESP_LOGI(TAG, "NTP 时间同步完成！系统时间已更新为: %s", strftime_buf);
+    g_is_ntp_synced = true;
+}
 
 // 事件回调函数，用于处理STA连接状态
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
@@ -18,10 +40,21 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         ESP_LOGI(TAG, "STA Disconnected. Trying to reconnect...");
+        g_is_ntp_synced = false; // 断开连接时，恢复由浏览器控制时间的逻辑
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "STA Connected! Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+
+        // 启动 NTP 时间同步（仅初始化一次）
+        if (!esp_sntp_enabled()) {
+            esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+            esp_sntp_setservername(0, "ntp.aliyun.com"); // 阿里云NTP服务器
+            esp_sntp_setservername(1, "pool.ntp.org");
+            esp_sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+            esp_sntp_init();
+        }
+
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED) {
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "Station "MACSTR" join, AID=%d", MAC2STR(event->mac), event->aid);

@@ -12,6 +12,9 @@
 // 定义时间同步标志位在开头
 bool time_sync_done = false;
 
+// 声明全局报警阈值，默认 30.0
+float g_alarm_threshold = 30.0;
+
 //声明一下静态的TAG
 static const char *TAG = "WEBSERVER";
 
@@ -67,9 +70,11 @@ static esp_err_t data_handler(httpd_req_t *req)
              "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\", "
              "\"max_temp_today\": \"%.1f\", \"min_temp_today\": \"%.1f\", "
              "\"max_hum_today\": \"%.1f\", \"min_hum_today\": \"%.1f\", "
+             "\"alarmThreshold\": \"%.1f\", "
              "\"history\": [", 
              temp_int, temp_dec, hum_int, hum_dec, 
-             max_t_today, min_t_today, max_h_today, min_h_today);
+             max_t_today, min_t_today, max_h_today, min_h_today,
+             g_alarm_threshold);
 
     // 循环写入历史数组
     for (int i = 0; i < 7; i++) {
@@ -281,9 +286,73 @@ static esp_err_t wifi_config_handler(httpd_req_t *req)
 
     return ESP_OK;
 }
+
+// 处理设置报警阈值的POST请求
+static esp_err_t set_alarm_handler(httpd_req_t *req)
+{
+    char buffer[100];
+    int ret, remaining = req->content_len;
+
+    if (remaining >= sizeof(buffer)) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    ret = httpd_req_recv(req, buffer, remaining);
+    if (ret <= 0) {
+        return ESP_FAIL;
+    }
+    buffer[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buffer);
+    if (root == NULL) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    cJSON *threshold_item = cJSON_GetObjectItem(root, "threshold");
+    if (threshold_item && cJSON_IsNumber(threshold_item)) {
+        g_alarm_threshold = threshold_item->valuedouble;
+        ESP_LOGI(TAG, "收到新报警阈值: %.1f", g_alarm_threshold);
+
+        // 保存到 NVS
+        nvs_handle_t my_handle;
+        if (nvs_open("storage", NVS_READWRITE, &my_handle) == ESP_OK) {
+            // NVS 不支持直接存 float，转成字符串或整型存，这里简单转成字符串
+            char val_str[16];
+            snprintf(val_str, sizeof(val_str), "%.1f", g_alarm_threshold);
+            nvs_set_str(my_handle, "alarm_thresh", val_str);
+            nvs_commit(my_handle);
+            nvs_close(my_handle);
+            ESP_LOGI(TAG, "已保存报警阈值到 NVS: %s", val_str);
+        }
+
+        const char* response = "{\"status\":\"ok\"}";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, response, strlen(response));
+    } else {
+        httpd_resp_send_500(req);
+    }
+
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
 // 定义一个函数，用于启动web服务器
 httpd_handle_t start_webserver(void)
 {
+    // 从 NVS 中加载之前保存的报警阈值，如存在
+    nvs_handle_t my_handle;
+    if (nvs_open("storage", NVS_READONLY, &my_handle) == ESP_OK) {
+        char val_str[16];
+        size_t required_size = sizeof(val_str);
+        if (nvs_get_str(my_handle, "alarm_thresh", val_str, &required_size) == ESP_OK) {
+            g_alarm_threshold = atof(val_str);
+            ESP_LOGI(TAG, "从 NVS 加载报警阈值: %.1f", g_alarm_threshold);
+        }
+        nvs_close(my_handle);
+    }
+
     // 定义一个httpd_config_t类型的变量，用于存储httpd的配置信息
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
@@ -346,6 +415,16 @@ httpd_handle_t start_webserver(void)
         };
         // 注册时间同步处理函数
         httpd_register_uri_handler(server, &time_sync_uri);
+
+        // 定义设置报警值的URI
+        httpd_uri_t set_alarm_uri = {
+            .uri       = "/set_alarm",
+            .method    = HTTP_POST,
+            .handler   = set_alarm_handler,
+            .user_ctx  = NULL
+        };
+        // 注册处理函数
+        httpd_register_uri_handler(server, &set_alarm_uri);
 
         // 注册配网接口的 URI
         httpd_uri_t wifi_config_uri = {
