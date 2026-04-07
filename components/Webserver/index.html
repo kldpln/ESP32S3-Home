@@ -366,22 +366,31 @@
                 </div>
             </div>
 
-            <!-- 温度报警设置区域 -->
-            <div class="card" style="margin-bottom: 20px;">
-                <h2 style="font-size: 1.1rem; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">🌡️ 报警设置</h2>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                    <span style="font-size: 0.95rem;">温度过高报警阈值 (℃)</span>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="number" id="alarmThresholdInput" value="30.0" step="0.5" style="width: 70px; padding: 6px; border-radius: 6px; border: none; text-align: center; background: rgba(255,255,255,0.2); color: white; outline: none; transition: background 0.3s;" onfocus="this.style.background='rgba(255,255,255,0.3)'" onblur="this.style.background='rgba(255,255,255,0.2)'">
-                        <button onclick="saveAlarmThreshold()" style="padding: 6px 12px; border-radius: 6px; border: none; background: #FF5E5B; color: white; cursor: pointer; font-weight: bold; font-size: 0.85rem; transition: background 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">保存</button>
-                    </div>
-                </div>
-            </div>
-
             <!--图表显示区域 独立且固定高度-->
              <div class="chart-wrapper">
                 <canvas id="tempChart"></canvas>
              </div>
+
+              <!-- 新增：优雅的独立报警配置卡片 (位于图表下方) -->
+              <div class="card" style="margin-top: 20px; margin-bottom: 25px; padding: 15px 20px; display: flex; flex-direction: column; gap: 18px;">
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                      <div style="font-size: 1.8rem; background: rgba(255, 94, 91, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; justify-content: center; align-items: center;">
+                          🚨
+                      </div>
+                      <div>
+                          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600;">高温报警自动干预</h3>
+                          <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: rgba(255,255,255,0.5);">当系统温度超过设定阈值时起效</p>
+                      </div>
+                  </div>
+                  
+                  <div style="display: flex; align-items: center; justify-content: center; margin: 0 auto; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 4px 6px;">
+                      <button onclick="document.getElementById('alarmThresholdInput').stepDown()" style="background: transparent; color: #fff; border: none; font-size: 1.2rem; cursor: pointer; padding: 0 10px; opacity: 0.7;">-</button>
+                      <input type="number" id="alarmThresholdInput" value="30.0" step="0.5" style="width: 48px; background: transparent; border: none; color: #fff; font-size: 1.05rem; font-weight: bold; text-align: center; outline: none; appearance: textfield; -moz-appearance: textfield;">
+                      <span style="color: #fff; font-size: 0.9rem; margin-right: 8px; opacity: 0.7;">℃</span>
+                      <button onclick="document.getElementById('alarmThresholdInput').stepUp()" style="background: transparent; color: #fff; border: none; font-size: 1.2rem; cursor: pointer; padding: 0 10px; opacity: 0.7;">+</button>
+                      <button onclick="saveAlarmThreshold()" style="background: #FF5E5B; color: #fff; border: none; border-radius: 16px; padding: 6px 14px; font-weight: 600; font-size: 0.85rem; cursor: pointer; margin-left: 5px; box-shadow: 0 2px 6px rgba(255,94,91,0.3);">保存</button>
+                  </div>
+              </div>
 
              <!-- 历史数据面板 (无需跳转，向下扩展) -->
              <div class="history-section">
@@ -450,6 +459,9 @@
 
         <!-- 温湿度文字显示脚本模块-->
         <script>
+            let pollingTimer = null; // 轮询保底定时器
+            let ws = null; // 全局 WebSocket 对象
+
             // ======= 报警控制变量 ======= //
             let alarmThreshold = 30.0;
             let isAlarmActive = false; // 记录报警状态，防止一直接收轰炸通知
@@ -565,135 +577,226 @@
                 }
             });
 
-            // === 数据获取与更新逻辑 ===
+            // 把原来 fetchData 里更新 UI 的部分提取出来，给 WebSocket 和 HTTP 共同使用
+            function updateUI(data) {
+                // 如果后端传回了正确的保存阈值，且是初次加载页面，则将其更新到UI和本地变量中
+                if (data.alarmThreshold && isFirstLoad) {
+                    let serverThreshold = parseFloat(data.alarmThreshold);
+                    if (!isNaN(serverThreshold)) {
+                        alarmThreshold = serverThreshold;
+                        document.getElementById("alarmThresholdInput").value = serverThreshold;
+                    }
+                    isFirstLoad = false; // 此后不再覆盖用户的临时界面输入
+                }
+
+                // ---更新卡片文字---
+                document.getElementById("temp-val").innerText = data.temperature;
+                document.getElementById("hum-val").innerText = data.humidity;
+
+                // ====== 新增：温度过高报警 ======
+                let currentTemp = parseFloat(data.temperature);
+                if (!isNaN(currentTemp)) {
+                    // 当当前温度超过设定阈值
+                    if (currentTemp > alarmThreshold) {
+                        // 确认之前是否已经弹出过警告
+                        if (!isAlarmActive) {
+                            isAlarmActive = true; // 锁定报警状态
+                            if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
+                                window.AndroidBridge.triggerAlert(
+                                    "温度过高警告！", 
+                                    "当前温度已达到 " + currentTemp + "℃，请注意！"
+                                );
+                            } else {
+                                console.log("【浏览器模拟提醒】：温度过高！当前温度 " + currentTemp + "℃");
+                            }
+                        }
+                    } else {
+                        // 如果温度降下来了，解除报警锁定，以便下次还能正常通知
+                        isAlarmActive = false;
+                    }
+                }
+
+                // 更新昨日数据 (改为读取 history[0])
+                if(document.getElementById("yesterday-max-temp")) {
+                    if(data.history && data.history[0] && data.history[0] !== null) {
+                        const yData = data.history[0];
+                        document.getElementById("yesterday-max-temp").innerText = yData.max_temp.toFixed(1) + "°C";
+                        document.getElementById("yesterday-min-temp").innerText = yData.min_temp.toFixed(1) + "°C";
+                        document.getElementById("yesterday-max-hum").innerText = yData.max_hum.toFixed(1) + "%";
+                        document.getElementById("yesterday-min-hum").innerText = yData.min_hum.toFixed(1) + "%";
+                    } else {
+                        document.getElementById("yesterday-max-temp").innerText = "--";
+                        document.getElementById("yesterday-min-temp").innerText = "--";
+                        document.getElementById("yesterday-max-hum").innerText = "--";
+                        document.getElementById("yesterday-min-hum").innerText = "--";
+                    }
+                }
+                
+                // 更新今日数据 (字段名保持不变，直接赋值)
+                if(document.getElementById("today-max-temp")) {
+                    document.getElementById("today-max-temp").innerText = data.max_temp_today + "°C";
+                    document.getElementById("today-min-temp").innerText = data.min_temp_today + "°C";
+                    document.getElementById("today-max-hum").innerText = data.max_hum_today + "%";
+                    document.getElementById("today-min-hum").innerText = data.min_hum_today + "%";
+                }
+        
+                // 更新图表
+                const now = new Date();
+                const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
+
+                // 添加新时间点到X轴
+                myChart.data.labels.push(timeLabel);
+                
+                // 先填入 0 或起始值，让点先“蹲在底部”
+                myChart.data.datasets[0].data.push(0);
+                myChart.data.datasets[1].data.push(0);
+
+                  // 保持图表不至于太挤，只保留最近5个点
+                  if (myChart.data.labels.length > 5) {
+                    myChart.data.labels.shift(); // 删掉最旧的时间
+                    myChart.data.datasets[0].data.shift(); // 删掉最旧的温度
+                    myChart.data.datasets[1].data.shift(); // 删掉最旧的湿度
+                }
+
+                // 第一步更新：静默更新（无动画），这时点在底部
+                myChart.update('none');
+
+                // 修改为真实数据
+                // 获取数组最后一个位置的索引
+                const lastIndex = myChart.data.datasets[0].data.length - 1;
+                myChart.data.datasets[0].data[lastIndex] = data.temperature;
+                myChart.data.datasets[1].data[lastIndex] = data.humidity;
+
+                // 第二步更新：默认更新（带动画），点会从底部“飘”上来
+                myChart.update();
+
+                // === 新增：更新历史柱状图 ===
+                // 准备数据容器
+                let tempLabels = [];
+                let tempHighs = [];
+                let tempLows = [];
+                const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+                if (data.history) {
+                    // 倒序遍历: 7天前 -> 昨天
+                    for (let i = 6; i >= 0; i--) {
+                        const dayData = data.history[i];
+                        if (dayData && dayData !== null) {
+                            tempLabels.push(weekdayMap[dayData.weekday]);
+                            tempHighs.push(dayData.max_temp);
+                            tempLows.push(dayData.min_temp);
+                        } else {
+                            tempLabels.push(""); // 无数据留空
+                            tempHighs.push(0); 
+                            tempLows.push(0);
+                        }
+                    }
+                }
+                // 如果 myWeeklyChart 已经初始化了，就更新它
+                if (typeof myWeeklyChart !== 'undefined' && myWeeklyChart) {
+                    myWeeklyChart.data.labels = tempLabels;
+                    myWeeklyChart.data.datasets[0].data = tempHighs;
+                    myWeeklyChart.data.datasets[1].data = tempLows;
+                    myWeeklyChart.update();
+                }
+            }
+
+            // === 传统 HTTP 数据获取 (轮询保底) ===
             function fetchData() {
                 // 使用时间戳强制绕过所有缓存机制，防止累积过长的请求头
                 fetch('/data?t=' + Date.now(), { cache: 'no-store' })
                     .then(response => response.json())
                     .then(data => {
-                        // 如果后端传回了正确的保存阈值，且是初次加载页面，则将其更新到UI和本地变量中
-                        if (data.alarmThreshold && isFirstLoad) {
-                            let serverThreshold = parseFloat(data.alarmThreshold);
-                            if (!isNaN(serverThreshold)) {
-                                alarmThreshold = serverThreshold;
-                                document.getElementById("alarmThresholdInput").value = serverThreshold;
-                            }
-                            isFirstLoad = false; // 此后不再覆盖用户的临时界面输入
-                        }
-
-                        // ---更新卡片文字---
-                        document.getElementById("temp-val").innerText = data.temperature;
-                        document.getElementById("hum-val").innerText = data.humidity;
-
-                        // ====== 新增：温度过高报警 ======
-                        let currentTemp = parseFloat(data.temperature);
-                        if (!isNaN(currentTemp)) {
-                            // 当当前温度超过设定阈值
-                            if (currentTemp > alarmThreshold) {
-                                // 确认之前是否已经弹出过警告
-                                if (!isAlarmActive) {
-                                    isAlarmActive = true; // 锁定报警状态
-                                    if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
-                                        window.AndroidBridge.triggerAlert(
-                                            "温度过高警告！", 
-                                            "当前温度已达到 " + currentTemp + "℃，请注意！"
-                                        );
-                                    } else {
-                                        console.log("【浏览器模拟提醒】：温度过高！当前温度 " + currentTemp + "℃");
-                                    }
-                                }
-                            } else {
-                                // 如果温度降下来了，解除报警锁定，以便下次还能正常通知
-                                isAlarmActive = false;
-                            }
-                        }
-
-                        // 更新昨日数据 (改为读取 history[0])
-                        if(document.getElementById("yesterday-max-temp")) { 
-                            if(data.history && data.history[0] && data.history[0] !== null) {
-                                const yData = data.history[0];
-                                document.getElementById("yesterday-max-temp").innerText = yData.max_temp.toFixed(1) + "°C";
-                                document.getElementById("yesterday-min-temp").innerText = yData.min_temp.toFixed(1) + "°C";
-                                document.getElementById("yesterday-max-hum").innerText = yData.max_hum.toFixed(1) + "%";
-                                document.getElementById("yesterday-min-hum").innerText = yData.min_hum.toFixed(1) + "%";
-                            } else {
-                                document.getElementById("yesterday-max-temp").innerText = "--";
-                                document.getElementById("yesterday-min-temp").innerText = "--";
-                                document.getElementById("yesterday-max-hum").innerText = "--";
-                                document.getElementById("yesterday-min-hum").innerText = "--";
-                            }
-                        }
-                        
-                        // 更新今日数据 (字段名保持不变，直接赋值)
-                        if(document.getElementById("today-max-temp")) {
-                            document.getElementById("today-max-temp").innerText = data.max_temp_today + "°C";
-                            document.getElementById("today-min-temp").innerText = data.min_temp_today + "°C";
-                            document.getElementById("today-max-hum").innerText = data.max_hum_today + "%";
-                            document.getElementById("today-min-hum").innerText = data.min_hum_today + "%";
-                        }
-                
-                        // 更新图表
-                        const now = new Date();
-                        const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
-
-                        // 添加新时间点到X轴
-                        myChart.data.labels.push(timeLabel);
-                        
-                        // 先填入 0 或起始值，让点先“蹲在底部”
-                        myChart.data.datasets[0].data.push(0);
-                        myChart.data.datasets[1].data.push(0);
-
-                          // 保持图表不至于太挤，只保留最近5个点
-                          if (myChart.data.labels.length > 5) {
-                            myChart.data.labels.shift(); // 删掉最旧的时间
-                            myChart.data.datasets[0].data.shift(); // 删掉最旧的温度
-                            myChart.data.datasets[1].data.shift(); // 删掉最旧的湿度
-                        }
-
-                        // 第一步更新：静默更新（无动画），这时点在底部
-                        myChart.update('none');
-
-                        // 修改为真实数据
-                        // 获取数组最后一个位置的索引
-                        const lastIndex = myChart.data.datasets[0].data.length - 1;
-                        myChart.data.datasets[0].data[lastIndex] = data.temperature;
-                        myChart.data.datasets[1].data[lastIndex] = data.humidity;
-
-                        // 第二步更新：默认更新（带动画），点会从底部“飘”上来
-                        myChart.update();
-
-                        // === 新增：更新历史柱状图 ===
-                        // 准备数据容器
-                        let tempLabels = [];
-                        let tempHighs = [];
-                        let tempLows = [];
-                        const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-
-                        if (data.history) {
-                            // 倒序遍历: 7天前 -> 昨天
-                            for (let i = 6; i >= 0; i--) {
-                                const dayData = data.history[i];
-                                if (dayData && dayData !== null) {
-                                    tempLabels.push(weekdayMap[dayData.weekday]);
-                                    tempHighs.push(dayData.max_temp);
-                                    tempLows.push(dayData.min_temp);
-                                } else {
-                                    tempLabels.push(""); // 无数据留空
-                                    tempHighs.push(0); 
-                                    tempLows.push(0);
-                                }
-                            }
-                        }
-                        // 如果 myWeeklyChart 已经初始化了，就更新它
-                        if (typeof myWeeklyChart !== 'undefined' && myWeeklyChart) {
-                            myWeeklyChart.data.labels = tempLabels;
-                            myWeeklyChart.data.datasets[0].data = tempHighs;
-                            myWeeklyChart.data.datasets[1].data = tempLows;
-                            myWeeklyChart.update();
-                        }
+                        updateUI(data); // 抛给公用函数更新界面
                     })
-                    .catch(error => console.error('Error:', error));
+                    .catch(error => console.error('HTTP Fetch Error:', error));
             }
+
+            // === 超级 WebSocket 实时引擎 (防幽灵连接增强版) ===
+            let lastWsMessageTime = 0;
+            let wsReconnectTimer = null;
+
+            function initWebSocket() {
+                console.log("尝试建立 WebSocket 实时连接...");
+                
+                // 强杀旧连接，防止跨网后 App 内存和套接字偷偷泄漏
+                if (ws) {
+                    ws.onclose = null;
+                    ws.onerror = null;
+                    ws.onmessage = null;
+                    ws.onopen = null;
+                    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                        ws.close();
+                    }
+                    ws = null;
+                }
+
+                const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+                // 动态获取主机名以支持 IP 和 mDNS 访问
+                ws = new WebSocket(wsProtocol + window.location.host + "/ws");
+                lastWsMessageTime = Date.now();
+
+                ws.onopen = function() {
+                    console.log("✅ WebSocket 连接成功！开启无头压缩高效传输！");
+                    // 连接成功后，关掉传统轮询，改用 WS 定时心跳请求数据（后端等待 "get"）
+                    clearInterval(pollingTimer);
+                    lastWsMessageTime = Date.now(); // 刚连上也重置下时间
+                    
+                    pollingTimer = setInterval(() => {
+                        if(ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send("get"); 
+                            
+                            // 【核心防挂死】如果发了 get 但 5 秒没收到任何回复，说明底层 TCP 已经死于网络切换
+                            if (Date.now() - lastWsMessageTime > 5000) {
+                                console.warn("❌ WS 心跳超时，连接被幽灵挂起！立即自杀并触发重连机制...");
+                                ws.close(); // 这将强行截断 Socket，释放服务器资源并触发 onclose
+                            }
+                        }
+                    }, 2000);
+                };
+
+                ws.onmessage = function(event) {
+                    lastWsMessageTime = Date.now(); // 每次收到合法数据，立刻续命
+                    // 收到极其干净的 JSON 数据帧，直接丢给 updateUI 渲染
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateUI(data);
+                    } catch (e) {
+                         console.error("WS 数据解析失败", e);
+                    }
+                };
+
+                ws.onclose = function() {
+                     console.warn("⚠️ WebSocket 被断开！进入 HTTP 保底和自动恢复策略！");
+                     // 防止重复重启降级，清空当前收发器
+                     clearInterval(pollingTimer);
+                     
+                     // 1. 无缝保底，立刻先用基础 HTTP 获取数据
+                     pollingTimer = setInterval(fetchData, 2000); 
+                     
+                     // 2. 调度并在后台尝试重新爬起更高质量的 WS 连接
+                     clearTimeout(wsReconnectTimer);
+                     wsReconnectTimer = setTimeout(initWebSocket, 8000);
+                };
+                
+                ws.onerror = function(err) {
+                    console.error("WS 错误: ", err);
+                    // 发生错误必然引发 close，把收尾工作统一交给 onclose 处理
+                };
+            }
+
+            // 监听网络环境突变 (移动端基站/Wi-Fi切换、切回前台等事件)，主动切断死连接
+            window.addEventListener('online', () => { 
+                console.log("检测到网络切换或恢复！立即重置通讯连接！");
+                if(ws) ws.close(); 
+            });
+            window.addEventListener('pagehide', () => { if(ws) ws.close(); });
+            window.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    // App重回前台如果发现 WS 断开或者超时，可以更积极地唤醒重连
+                    if(ws && ws.readyState !== WebSocket.OPEN) initWebSocket();
+                }
+            });
 
             //时间同步函数
             function syncTime() {
@@ -719,9 +822,9 @@
             //页面加载完成后同步
             syncTime();
             
-            //启动定时器
-            setInterval(fetchData, 4000); // 改为4秒刷新一次
-            fetchData(); // 初始执行一次
+            //启动定时器及 WebSocket
+            fetchData(); // 先发一次 HTTP 数据请求预热
+            initWebSocket(); // 启动 WebSocket 取代定时器（若失败自动重走定时器轮询）
 
             // === 新增：Wi-Fi 配网弹窗逻辑 ===
             function openWifiModal() {
