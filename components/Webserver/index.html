@@ -6,6 +6,8 @@
         <meta name="viewport" content="width=device-width,initial-scale=1.0">
         <!--设置网页标题-->
         <title>温湿度监控系统</title>
+        <!-- 阻止浏览器自动去请求 favicon.ico 网站图标 -->
+        <link rel="icon" href="data:,">
         <style>
             /* 全局样式重置 */
             * {
@@ -479,6 +481,7 @@
                 // POST 请求发送给 ESP32 后端
                 fetch('/set_alarm', {
                     method: 'POST',
+                    cache: 'no-store',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ threshold: newThreshold })
                 })
@@ -564,7 +567,8 @@
 
             // === 数据获取与更新逻辑 ===
             function fetchData() {
-                fetch('/data')
+                // 使用时间戳强制绕过所有缓存机制，防止累积过长的请求头
+                fetch('/data?t=' + Date.now(), { cache: 'no-store' })
                     .then(response => response.json())
                     .then(data => {
                         // 如果后端传回了正确的保存阈值，且是初次加载页面，则将其更新到UI和本地变量中
@@ -700,6 +704,7 @@
                 //发送POST请求到服务器的时间同步接口
                 fetch('/sync_time', {
                     method: 'POST',
+                    cache: 'no-store',
                     body: timestamp.toString() //将时间转换为字符串发送
                 })
                 .then(response => {
@@ -715,7 +720,7 @@
             syncTime();
             
             //启动定时器
-            setInterval(fetchData, 3000); // 改为3秒刷新一次
+            setInterval(fetchData, 4000); // 改为4秒刷新一次
             fetchData(); // 初始执行一次
 
             // === 新增：Wi-Fi 配网弹窗逻辑 ===
@@ -747,6 +752,7 @@
                 
                 fetch('/wifi_config', {
                     method: 'POST',
+                    cache: 'no-store',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ssid: ssid, password: password })
                 })
