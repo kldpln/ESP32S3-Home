@@ -501,7 +501,7 @@
                 .then(resData => {
                     if (resData.status === "ok") {
                         if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
-                            window.AndroidBridge.triggerAlert("设置成功", "报警阈值已保存为 " + newThreshold + "℃");
+                            window.AndroidBridge.triggerAlert("设置成功", "报警阈值已保存为 " + newThreshold + "℃", "success");
                         } else {
                             alert("报警阈值已成功保存到设备！");
                         }
@@ -604,7 +604,8 @@
                             if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
                                 window.AndroidBridge.triggerAlert(
                                     "温度过高警告！", 
-                                    "当前温度已达到 " + currentTemp + "℃，请注意！"
+                                    "当前温度已达到 " + currentTemp + "℃，请注意！",
+                                    "alert"
                                 );
                             } else {
                                 console.log("【浏览器模拟提醒】：温度过高！当前温度 " + currentTemp + "℃");

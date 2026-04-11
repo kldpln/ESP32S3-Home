@@ -1,6 +1,7 @@
 dependencies:
   espressif/mdns:
-    component_hash: 1ebe3bd675bb9d1c58f52bc0b609b32f74e572b01c328f9e61282040c775495c
+    component_hash: 
+      1ebe3bd675bb9d1c58f52bc0b609b32f74e572b01c328f9e61282040c775495c
     dependencies:
     - name: idf
       require: private
@@ -12,7 +13,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.4.3
+    version: 5.5.2
 direct_dependencies:
 - espressif/mdns
 manifest_hash: 06e00677a9d5eab34dadb7f4c95b078be41b3d2bdd921c9f3520e41f7143e5ad

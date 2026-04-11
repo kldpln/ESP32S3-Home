@@ -21,6 +21,7 @@ esp_err_t start_mdns_service(void)
     mdns_instance_name_set("Legadema Smart Home");
 
     // 添加一个公开服务
+      mdns_service_add("Legadema WebServer", "_legadema", "_tcp", 80, NULL, 0);
     // "_http"表示网页服务, "_tcp"表示TCP协议， "80"是你的 WebServer 默认端口
     mdns_service_add("Legadema WebServer", "_http", "_tcp", 80, NULL, 0);
 
