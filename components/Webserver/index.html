@@ -579,14 +579,19 @@
 
             // 把原来 fetchData 里更新 UI 的部分提取出来，给 WebSocket 和 HTTP 共同使用
             function updateUI(data) {
-                // 如果后端传回了正确的保存阈值，且是初次加载页面，则将其更新到UI和本地变量中
-                if (data.alarmThreshold && isFirstLoad) {
+                // 如果后端传回了保存的阈值
+                if (data.alarmThreshold) {
                     let serverThreshold = parseFloat(data.alarmThreshold);
                     if (!isNaN(serverThreshold)) {
                         alarmThreshold = serverThreshold;
-                        document.getElementById("alarmThresholdInput").value = serverThreshold;
+                        
+                        // 除非用户正在操作修改这个输入框，否则实时同步页面上的显示值
+                        const inputEl = document.getElementById("alarmThresholdInput");
+                        if (document.activeElement !== inputEl) {
+                            inputEl.value = serverThreshold;
+                        }
                     }
-                    isFirstLoad = false; // 此后不再覆盖用户的临时界面输入
+                    isFirstLoad = false;
                 }
 
                 // ---更新卡片文字---
@@ -719,7 +724,11 @@
 
             function initWebSocket() {
                 console.log("尝试建立 WebSocket 实时连接...");
-                
+
+                // 【核心修复】进入重新初始化前，必须清空上个世代的任何定时器，防止叠罗汉！
+                if (typeof pollingTimer !== 'undefined') clearInterval(pollingTimer);
+                if (typeof wsReconnectTimer !== 'undefined') clearTimeout(wsReconnectTimer);
+
                 // 强杀旧连接，防止跨网后 App 内存和套接字偷偷泄漏
                 if (ws) {
                     ws.onclose = null;
@@ -747,9 +756,9 @@
                         if(ws && ws.readyState === WebSocket.OPEN) {
                             ws.send("get"); 
                             
-                            // 【核心防挂死】如果发了 get 但 5 秒没收到任何回复，说明底层 TCP 已经死于网络切换
-                            if (Date.now() - lastWsMessageTime > 5000) {
-                                console.warn("❌ WS 心跳超时，连接被幽灵挂起！立即自杀并触发重连机制...");
+                            // 【核心防丢包】如果发了 get 但 8 秒没收到任何回复，说明底层 TCP 已经死于网络切换
+                            if (Date.now() - lastWsMessageTime > 8000) {
+                                console.warn("❌ WS 心跳超时，连接被网络抖动阻塞！立即自杀并触发重连...");
                                 ws.close(); // 这将强行截断 Socket，释放服务器资源并触发 onclose
                             }
                         }
@@ -792,6 +801,8 @@
                 if(ws) ws.close(); 
             });
             window.addEventListener('pagehide', () => { if(ws) ws.close(); });
+            window.addEventListener('unload', () => { if(ws) ws.close(); });
+            window.addEventListener('beforeunload', () => { if(ws) ws.close(); });
             window.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
                     // App重回前台如果发现 WS 断开或者超时，可以更积极地唤醒重连

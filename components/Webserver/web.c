@@ -347,6 +347,20 @@ static esp_err_t wifi_config_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// 异步保存任务，防止大块擦除闪存时卡住整个网络
+static void save_alarm_task(void *pvParameters) {
+    nvs_handle_t my_handle;
+    if (nvs_open("storage", NVS_READWRITE, &my_handle) == ESP_OK) {
+        char val_str[16];
+        snprintf(val_str, sizeof(val_str), "%.1f", g_alarm_threshold);
+        nvs_set_str(my_handle, "alarm_thresh", val_str);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+        ESP_LOGI(TAG, "已异步保存报警阈值到 NVS: %s", val_str);
+    }
+    vTaskDelete(NULL);
+}
+
 // 处理设置报警阈值的POST请求
 static esp_err_t set_alarm_handler(httpd_req_t *req)
 {
@@ -375,17 +389,8 @@ static esp_err_t set_alarm_handler(httpd_req_t *req)
         g_alarm_threshold = threshold_item->valuedouble;
         ESP_LOGI(TAG, "收到新报警阈值: %.1f", g_alarm_threshold);
 
-        // 保存到 NVS
-        nvs_handle_t my_handle;
-        if (nvs_open("storage", NVS_READWRITE, &my_handle) == ESP_OK) {
-            // NVS 不支持直接存 float，转成字符串或整型存，这里简单转成字符串
-            char val_str[16];
-            snprintf(val_str, sizeof(val_str), "%.1f", g_alarm_threshold);
-            nvs_set_str(my_handle, "alarm_thresh", val_str);
-            nvs_commit(my_handle);
-            nvs_close(my_handle);
-            ESP_LOGI(TAG, "已保存报警阈值到 NVS: %s", val_str);
-        }
+        // 创建异步 NVS 存储任务，立即释放当前 HTTP 线程
+        xTaskCreate(save_alarm_task, "save_alarm_task", 3072, NULL, 4, NULL);
 
         const char* response = "{\"status\":\"ok\"}";
         httpd_resp_set_type(req, "application/json");
@@ -418,6 +423,7 @@ httpd_handle_t start_webserver(void)
     // 允许服务器抛弃旧的闲置会话（Zombie Connection / 幽灵连接）
     // 防止手机App切换网络时没有发fin断开TCP，导致占满 socket 使其他端（比如PC）无法连接
     config.lru_purge_enable = true;
+    config.recv_wait_timeout = 10; // 给 WebSockets 足够的心跳容忍时间（前端每2秒发一次）
 
     // 定义一个httpd_handle_t类型的变量，用于存储httpd的句柄
     httpd_handle_t server = NULL;

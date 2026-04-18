@@ -79,13 +79,6 @@ static void data_process_task(void *pvParameters)
         
         if (result == ESP_OK)
         {
-            // 将 RMT 读到的浮点数转换为原来 buffer 的格式（整数和小数分离）
-            // 注意：这种转换是为了兼容你后端取数据的接口
-            buffer[2] = (int)rmt_data.temperature;                           // 温度整数
-            buffer[3] = (int)((rmt_data.temperature - buffer[2]) * 10);      // 温度小数
-            buffer[0] = (int)rmt_data.humidity;                              // 湿度整数
-            buffer[1] = (int)((rmt_data.humidity - buffer[0]) * 10);         // 湿度小数
-
             // 最大最小值检测
 
             // 定义上一次的有效读数，用于对比
@@ -122,6 +115,12 @@ static void data_process_task(void *pvParameters)
                 }
             }
             
+            // 更新缓存（放在异常值处理之后，保证 Web 端拿到的也是清洗后的安全数据！）
+            buffer[2] = (int)temp;                           // 温度整数
+            buffer[3] = (int)((temp - buffer[2]) * 10);      // 温度小数
+            buffer[0] = (int)hum;                            // 湿度整数
+            buffer[1] = (int)((hum - buffer[0]) * 10);       // 湿度小数
+
             //最值对比
             if (first_read) {
                 curr_max_temp = temp;
