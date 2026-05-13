@@ -73,6 +73,32 @@
                 /* 去掉边框以保持一致 */
             }
 
+            .card.alarm-glow {
+                border: 1px solid rgba(255, 94, 91, 0.85);
+                box-shadow: 0 0 18px rgba(255, 94, 91, 0.55);
+                animation: alarmPulse 1.1s ease-in-out infinite;
+            }
+
+            .alarm-banner {
+                display: none;
+                margin-top: 8px;
+                margin-bottom: 16px;
+                padding: 10px 12px;
+                border-radius: 10px;
+                background: rgba(255, 94, 91, 0.2);
+                border: 1px solid rgba(255, 94, 91, 0.65);
+                color: #ffd9d8;
+                font-size: 0.92rem;
+                font-weight: 600;
+                text-align: left;
+            }
+
+            @keyframes alarmPulse {
+                0% { box-shadow: 0 0 8px rgba(255, 94, 91, 0.4); }
+                50% { box-shadow: 0 0 22px rgba(255, 94, 91, 0.78); }
+                100% { box-shadow: 0 0 8px rgba(255, 94, 91, 0.4); }
+            }
+
             h1 {
                 font-size: 1.8rem;
                 margin-bottom: 20px;
@@ -349,7 +375,7 @@
 
             <div class="cards-wrapper">
                 <!-- 温度卡片 -->
-                 <div class="card">
+                 <div class="card" id="tempCard">
                     <h2>温度</h2>
                     <div class="value-box">
                         <span id="temp-val" class="val-number">--</span>
@@ -366,6 +392,8 @@
                 </div>
             </div>
 
+            <div id="tempAlarmBanner" class="alarm-banner"></div>
+
             <!--图表显示区域 独立且固定高度-->
              <div class="chart-wrapper">
                 <canvas id="tempChart"></canvas>
@@ -378,7 +406,7 @@
                           🚨
                       </div>
                       <div>
-                          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600;">高温报警自动干预</h3>
+                          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600;">高温报警</h3>
                           <p style="margin: 3px 0 0 0; font-size: 0.8rem; color: rgba(255,255,255,0.5);">当系统温度超过设定阈值时起效</p>
                       </div>
                   </div>
@@ -443,11 +471,19 @@
                          </div>
                     </div>
 
-                    <!-- 一周趋势图 -->
+                    <!-- 一周温度趋势图 -->
                     <div class="history-card history-chart-full">
-                        <h3>本周趋势</h3>
+                        <h3>本周温度趋势</h3>
                         <div style="height: 200px; position: relative;">
                             <canvas id="weeklyChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 一周湿度趋势图 -->
+                    <div class="history-card history-chart-full">
+                        <h3>本周湿度趋势</h3>
+                        <div style="height: 200px; position: relative;">
+                            <canvas id="weeklyHumChart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -466,6 +502,7 @@
             let alarmThreshold = 30.0;
             let isAlarmActive = false; // 记录报警状态，防止一直接收轰炸通知
             let isFirstLoad = true;    // 标记是否第一次加载数据
+            let lastWebAlarmPopupAt = 0;
 
             document.addEventListener("DOMContentLoaded", function () {
                 const thresholdInput = document.getElementById("alarmThresholdInput");
@@ -473,6 +510,7 @@
                     thresholdInput.addEventListener("change", function(e) {
                         alarmThreshold = parseFloat(e.target.value) || 30.0;
                         isAlarmActive = false; // 修改阈值后重置状态
+                        clearWebHighTempAlert();
                     });
                 }
             });
@@ -489,6 +527,7 @@
                 // 更新前端本地变量
                 alarmThreshold = newThreshold;
                 isAlarmActive = false;
+                clearWebHighTempAlert();
                 
                 // POST 请求发送给 ESP32 后端
                 fetch('/set_alarm', {
@@ -513,6 +552,32 @@
                     console.error('Save Alarm Error:', err);
                     alert("保存失败：网络连接异常");
                 });
+            }
+
+            function showWebHighTempAlert(currentTemp) {
+                const banner = document.getElementById("tempAlarmBanner");
+                if (banner) {
+                    banner.innerText = "高温预警：当前 " + currentTemp.toFixed(1) + "°C，阈值 " + alarmThreshold.toFixed(1) + "°C";
+                    banner.style.display = "block";
+                }
+
+                const tempCard = document.getElementById("tempCard");
+                if (tempCard) {
+                    tempCard.classList.add("alarm-glow");
+                }
+            }
+
+            function clearWebHighTempAlert() {
+                const banner = document.getElementById("tempAlarmBanner");
+                if (banner) {
+                    banner.style.display = "none";
+                    banner.innerText = "";
+                }
+
+                const tempCard = document.getElementById("tempCard");
+                if (tempCard) {
+                    tempCard.classList.remove("alarm-glow");
+                }
             }
 
             // === 初始化图表配置 ===
@@ -603,6 +668,7 @@
                 if (!isNaN(currentTemp)) {
                     // 当当前温度超过设定阈值
                     if (currentTemp > alarmThreshold) {
+                        showWebHighTempAlert(currentTemp);
                         // 确认之前是否已经弹出过警告
                         if (!isAlarmActive) {
                             isAlarmActive = true; // 锁定报警状态
@@ -613,12 +679,17 @@
                                     "alert"
                                 );
                             } else {
-                                console.log("【浏览器模拟提醒】：温度过高！当前温度 " + currentTemp + "℃");
+                                const now = Date.now();
+                                if (now - lastWebAlarmPopupAt > 30000) {
+                                    lastWebAlarmPopupAt = now;
+                                    alert("温度过高警告！当前温度 " + currentTemp.toFixed(1) + "℃，请注意散热。");
+                                }
                             }
                         }
                     } else {
                         // 如果温度降下来了，解除报警锁定，以便下次还能正常通知
                         isAlarmActive = false;
+                        clearWebHighTempAlert();
                     }
                 }
 
@@ -681,6 +752,8 @@
                 let tempLabels = [];
                 let tempHighs = [];
                 let tempLows = [];
+                let humHighs = [];
+                let humLows = [];
                 const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
                 if (data.history) {
@@ -691,10 +764,14 @@
                             tempLabels.push(weekdayMap[dayData.weekday]);
                             tempHighs.push(dayData.max_temp);
                             tempLows.push(dayData.min_temp);
+                            humHighs.push(dayData.max_hum);
+                            humLows.push(dayData.min_hum);
                         } else {
                             tempLabels.push(""); // 无数据留空
                             tempHighs.push(0); 
                             tempLows.push(0);
+                            humHighs.push(0);
+                            humLows.push(0);
                         }
                     }
                 }
@@ -704,6 +781,14 @@
                     myWeeklyChart.data.datasets[0].data = tempHighs;
                     myWeeklyChart.data.datasets[1].data = tempLows;
                     myWeeklyChart.update();
+                }
+
+                // 更新湿度周趋势柱状图
+                if (typeof myWeeklyHumChart !== 'undefined' && myWeeklyHumChart) {
+                    myWeeklyHumChart.data.labels = tempLabels;
+                    myWeeklyHumChart.data.datasets[0].data = humHighs;
+                    myWeeklyHumChart.data.datasets[1].data = humLows;
+                    myWeeklyHumChart.update();
                 }
             }
 
@@ -918,17 +1003,17 @@
                 data: {
                     labels: [], // 等待 fetchData 填充
                     datasets: [{
-                        label: '最高温',
+                        label: '最高温度',
                         data: [],
                         backgroundColor: 'rgba(255, 99, 132, 0.5)',
                         borderColor: 'rgba(255, 99, 132, 1)',
                         borderWidth: 1
                     },
                     {
-                        label: '最低温',
+                        label: '最低温度',
                         data: [],
-                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(255, 159, 64, 0.5)',
+                        borderColor: 'rgba(255, 159, 64, 1)',
                         borderWidth: 1
                     }]
                 },
@@ -937,6 +1022,36 @@
                     maintainAspectRatio: false,
                     plugins: { legend: { position: 'bottom' } }, 
                     scales: { y: { beginAtZero: false } }
+                }
+            });
+
+            // === 初始化本周湿度趋势图 ===
+            var myWeeklyHumChart;
+            const ctxWeeklyHum = document.getElementById('weeklyHumChart').getContext('2d');
+            myWeeklyHumChart = new Chart(ctxWeeklyHum, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: '最高湿度',
+                        data: [],
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: '最低湿度',
+                        data: [],
+                        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, min: 0, max: 100 } }
                 }
             });
         </script>

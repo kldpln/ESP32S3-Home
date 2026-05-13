@@ -14,6 +14,34 @@ static gpio_num_t dht11_gpio  = GPIO_NUM_NC;
 // 数据接收队列
 static QueueHandle_t rx_receive_queue = NULL;
 
+// static void log_rmt_raw_symbols(const rmt_rx_done_event_data_t *rx_data)
+// {
+//     ESP_LOGI(TAG, "RMT 原始符号数量: %d", rx_data->num_symbols);
+//     for (int i = 0; i < rx_data->num_symbols; i++) {
+//         const rmt_symbol_word_t *symbol = &rx_data->received_symbols[i];
+//         ESP_LOGI(TAG, "SYM[%02d] L0=%d D0=%u us | L1=%d D1=%u us",
+//                  i,
+//                  symbol->level0, (unsigned int)symbol->duration0,
+//                  symbol->level1, (unsigned int)symbol->duration1);
+//     }
+// }
+//
+// static void log_dht11_bits_and_bytes(const uint8_t *bytes, int bit_count)
+// {
+//     char bit_text[41] = {0};
+//
+//     for (int i = 0; i < bit_count && i < 40; i++) {
+//         int byte_index = i / 8;
+//         int bit_index = 7 - (i % 8);
+//         int bit = (bytes[byte_index] >> bit_index) & 0x01;
+//         bit_text[i] = bit ? '1' : '0';
+//     }
+//
+//     ESP_LOGI(TAG, "解析后的二进制流: %s", bit_text);
+//     ESP_LOGI(TAG, "解析后的字节: %02X %02X %02X %02X %02X",
+//              bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]);
+// }
+
 // 接收完成回调函数
 static bool IRAM_ATTR example_rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
@@ -111,6 +139,8 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return ESP_ERR_TIMEOUT;
     }
 
+    // log_rmt_raw_symbols(&rx_data);
+
     // 使用精准线性波形解析法（消除起始段杂波错位导致的左移翻倍问题）
     int durations[160] = {0};
     int levels[160] = {0};
@@ -159,6 +189,8 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return ESP_ERR_INVALID_SIZE;
     }
 
+    // log_dht11_bits_and_bytes(dht11_bytes, bit_index);
+
     // 校验数据
     uint8_t checksum = dht11_bytes[0] + dht11_bytes[1] + dht11_bytes[2] + dht11_bytes[3];
     if (checksum != dht11_bytes[4]) {
@@ -176,6 +208,6 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         data->temperature = -data->temperature;
     }
 
-    ESP_LOGI(TAG, "Read Success! Temp: %.1f, Hum: %.1f", data->temperature, data->humidity);
+    ESP_LOGI(TAG, "数据读取成功! 温度: %.1f, 湿度: %.1f", data->temperature, data->humidity);
     return ESP_OK;
 }
