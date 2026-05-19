@@ -11,9 +11,22 @@
 #include <time.h>
 
 static const char *TAG = "WIFI_APSTA";
+static const int MAX_STA_RETRY_COUNT = 5;
+static int s_sta_retry_count = 0;
+static bool s_sta_connect_enabled = false;
+static bool s_sta_retry_blocked = false;
 
 // 定义全局标志位（默认未通过网络同步）
 bool g_is_ntp_synced = false;
+
+void wifi_sta_reset_retry_and_connect(void)
+{
+    s_sta_retry_count = 0;
+    s_sta_connect_enabled = true;
+    s_sta_retry_blocked = false;
+    ESP_LOGI(TAG, "STA 重试状态已重置，正在使用新的 Wi-Fi 配置重新连接");
+    esp_wifi_connect();
+}
 
 // 当 SNTP 成功获取到时间时的回调函数
 void time_sync_notification_cb(struct timeval *tv)
@@ -28,7 +41,7 @@ void time_sync_notification_cb(struct timeval *tv)
     char strftime_buf[64];
     strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
 
-    ESP_LOGI(TAG, "NTP 时间同步完成！系统时间已更新为: %s", strftime_buf);
+    ESP_LOGI(TAG, "NTP 时间同步完成！系统时间已更新为：%s", strftime_buf);
     g_is_ntp_synced = true;
 }
 
@@ -37,14 +50,40 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
+        if (s_sta_connect_enabled && !s_sta_retry_blocked) {
+            ESP_LOGI(TAG, "STA 已启动，开始连接...");
+            esp_wifi_connect();
+        } else {
+            ESP_LOGW(TAG, "STA 已启动，但当前没有有效的 Wi-Fi 配置，或重试已被阻止");
+        }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "STA Disconnected. Trying to reconnect...");
+        ESP_LOGI(TAG, "STA 已断开连接");
         g_is_ntp_synced = false; // 断开连接时，恢复由浏览器控制时间的逻辑
-        esp_wifi_connect();
+
+        if (!s_sta_connect_enabled) {
+            ESP_LOGW(TAG, "当前还没有有效的 STA 配置，跳过重连");
+            return;
+        }
+
+        if (s_sta_retry_blocked) {
+            ESP_LOGW(TAG, "STA 重试已停止，等待新的 Wi-Fi 配置更新后再尝试");
+            return;
+        }
+
+        if (s_sta_retry_count < MAX_STA_RETRY_COUNT) {
+            s_sta_retry_count++;
+            ESP_LOGI(TAG, "尝试重新连接...（%d/%d）", s_sta_retry_count, MAX_STA_RETRY_COUNT);
+            esp_wifi_connect();
+        } else {
+            s_sta_retry_blocked = true;
+            ESP_LOGW(TAG, "STA 重连已失败 %d 次，停止重试，等待新的 Wi-Fi 配置更新", MAX_STA_RETRY_COUNT);
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-        ESP_LOGI(TAG, "STA Connected! Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "STA 连接成功！获取到 IP：" IPSTR, IP2STR(&event->ip_info.ip));
+        s_sta_retry_count = 0;
+        s_sta_retry_blocked = false;
+        s_sta_connect_enabled = true;
 
         // 启动 NTP 时间同步（仅初始化一次）
         if (!esp_sntp_enabled()) {
@@ -57,10 +96,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED) {
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
-        ESP_LOGI(TAG, "Station "MACSTR" join, AID=%d", MAC2STR(event->mac), event->aid);
+        ESP_LOGI(TAG, "有设备接入 AP：" MACSTR "，AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
-        ESP_LOGI(TAG, "Station "MACSTR" leave, AID=%d", MAC2STR(event->mac), event->aid);
+        ESP_LOGI(TAG, "有设备离开 AP：" MACSTR "，AID=%d", MAC2STR(event->mac), event->aid);
     }
 }
 
@@ -111,13 +150,22 @@ void wifi_init_softap()// 配置 Wi-Fi 为 AP+STA 模式
         esp_err_t get_pass_err = nvs_get_str(my_handle, "wifi_pass", (char *)sta_config.sta.password, &pass_len);
         
         if (get_ssid_err == ESP_OK && get_pass_err == ESP_OK) {
-            ESP_LOGI(TAG, "从NVS读取到 Wi-Fi 配置, SSID: %s", sta_config.sta.ssid);
+            ESP_LOGI(TAG, "已从 NVS 读取到 Wi-Fi 配置，SSID：%s", sta_config.sta.ssid);
+            s_sta_connect_enabled = true;
+            s_sta_retry_blocked = false;
+            s_sta_retry_count = 0;
         } else {
-            ESP_LOGW(TAG, "NVS中没有存历史 Wi-Fi 信息，等待网页配网");
+            ESP_LOGW(TAG, "NVS 中没有保存历史 Wi-Fi 信息，等待网页配网");
+            s_sta_connect_enabled = false;
+            s_sta_retry_blocked = false;
+            s_sta_retry_count = 0;
         }
         nvs_close(my_handle);
     } else {
         ESP_LOGE(TAG, "无法打开 NVS 命名空间 'storage'");
+        s_sta_connect_enabled = false;
+        s_sta_retry_blocked = false;
+        s_sta_retry_count = 0;
     }
 
     // 设置WiFi模式为 AP + STA
@@ -130,6 +178,6 @@ void wifi_init_softap()// 配置 Wi-Fi 为 AP+STA 模式
     // 启动WiFi
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "Wi-Fi AP+STA started.");
-    ESP_LOGI(TAG, "AP SSID: %s, password: %s", ap_config.ap.ssid, ap_config.ap.password);
+    ESP_LOGI(TAG, "Wi-Fi AP+STA 已启动。");
+    ESP_LOGI(TAG, "AP SSID：%s，密码：%s", ap_config.ap.ssid, ap_config.ap.password);
 }

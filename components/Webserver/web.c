@@ -307,7 +307,7 @@ static esp_err_t wifi_config_handler(httpd_req_t *req)
         // 断开现有的连接 -> 重新设置参数 -> 重新连接
         esp_wifi_disconnect();
         esp_wifi_set_config(WIFI_IF_STA, &sta_config);
-        esp_wifi_connect();
+        wifi_sta_reset_retry_and_connect();
 
         // 等待获取 IP 地址 (最多等 8 秒)
         esp_netif_t *netif_sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");

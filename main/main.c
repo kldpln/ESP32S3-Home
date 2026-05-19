@@ -8,7 +8,6 @@
 #include "ap.h" // 包含AP头文件
 #include "data_process.h" // 包含DHT11头文件
 #include "my_mdns.h" // 包含mDNS头文件
-#include "system_monitor.h"
 
 // 主函数
 void app_main()
@@ -27,10 +26,6 @@ void app_main()
     data_process_init();
     // 启动 DHT11 读取任务
     data_process_start_task();
-
-    // 启动系统监控（串口 JSON 输出），采样间隔 2000 ms
-    system_monitor_init();
-    system_monitor_start_task(2000);
 }
 
 

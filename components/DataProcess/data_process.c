@@ -185,7 +185,7 @@ static void data_process_task(void *pvParameters)
         {
             ESP_LOGE(TAG, "Reading data failed.");
         }
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
     }
 }
 
