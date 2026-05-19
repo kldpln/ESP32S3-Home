@@ -28,6 +28,9 @@ static const char* NVS_NAMESPACE = "history";
 
 // 实时温度 湿度buffer
 static uint8_t buffer[5];
+static float current_temperature = 0.0f;
+static float current_humidity = 0.0f;
+static bool current_reading_valid = false;
 
 // DHT11 初始化引脚，等待1s上电时间
 void data_process_init()
@@ -102,24 +105,21 @@ static void data_process_task(void *pvParameters)
             if(valid){
                 last_valid_temp = temp;
                 last_valid_hum = hum;
+                current_temperature = temp;
+                current_humidity = hum;
+                current_reading_valid = true;
             } else {
-                //如果数据异常但又没有历史数据可用，就暂时接受这个异常值，避免数据完全中断
-                if(last_valid_temp == -999.0){
-                    last_valid_temp = temp;
-                    last_valid_hum = hum;
-                    ESP_LOGW(TAG, "没有历史数据可用，接受当前异常值作为初始值");
-                } else {
-                    temp = last_valid_temp;
-                    hum = last_valid_hum;
-                    ESP_LOGW(TAG, "使用上次有效数据：温度 %.1f, 湿度 %.1f", temp, hum);
-                }
+                current_reading_valid = false;
+                ESP_LOGW(TAG, "当前采样无效，等待下一次有效数据");
             }
-            
-            // 更新缓存（放在异常值处理之后，保证 Web 端拿到的也是清洗后的安全数据！）
-            buffer[2] = (int)temp;                           // 温度整数
-            buffer[3] = (int)((temp - buffer[2]) * 10);      // 温度小数
-            buffer[0] = (int)hum;                            // 湿度整数
-            buffer[1] = (int)((hum - buffer[0]) * 10);       // 湿度小数
+
+            // 只有有效数据才更新缓存，避免把旧值继续冒充成新值
+            if (current_reading_valid) {
+                buffer[2] = (int)temp;                           // 温度整数
+                buffer[3] = (int)((temp - buffer[2]) * 10);      // 温度小数
+                buffer[0] = (int)hum;                            // 湿度整数
+                buffer[1] = (int)((hum - buffer[0]) * 10);       // 湿度小数
+            }
 
             //最值对比
             if (first_read) {
@@ -184,6 +184,7 @@ static void data_process_task(void *pvParameters)
         else
         {
             ESP_LOGE(TAG, "Reading data failed.");
+            current_reading_valid = false;
         }
         vTaskDelay(3000 / portTICK_PERIOD_MS);
     }
@@ -218,6 +219,21 @@ int get_humidity_int(void)
 int get_humidity_dec(void)
 {
     return buffer[1];
+}
+
+bool get_current_reading_valid(void)
+{
+    return current_reading_valid;
+}
+
+float get_current_temperature(void)
+{
+    return current_temperature;
+}
+
+float get_current_humidity(void)
+{
+    return current_humidity;
 }
 
 // 获取今日最大最小值

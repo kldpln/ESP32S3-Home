@@ -137,6 +137,23 @@
                 font-weight: 500;
             }
 
+            .card.reading-stale .val-number {
+                color: rgba(255, 255, 255, 0.65);
+                letter-spacing: 1px;
+            }
+
+            .card.reading-stale .val-unit {
+                opacity: 0.45;
+            }
+
+            .reading-hint {
+                margin-top: 4px;
+                font-size: 0.82rem;
+                color: rgba(255, 255, 255, 0.72);
+                text-align: center;
+                min-height: 1.1em;
+            }
+
             /* 图表容器优化 - 统一外观 */
             .chart-wrapper {
                 background: rgba(255, 255, 255, 0.05);
@@ -379,16 +396,18 @@
                     <h2>温度</h2>
                     <div class="value-box">
                         <span id="temp-val" class="val-number">--</span>
-                        <span id="unit" class="val-unit">°C</span>
+                        <span id="temp-unit" class="val-unit">°C</span>
                     </div>
+                    <div id="temp-hint" class="reading-hint"></div>
                  </div>
                 <!-- 湿度卡片 -->
-                <div class="card">
+                <div class="card" id="humCard">
                     <h2>湿度</h2>
                     <div class="value-box">
                         <span id="hum-val" class="val-number">--</span>
-                        <span id="unit" class="val-unit">%</span>
+                        <span id="hum-unit" class="val-unit">%</span>
                     </div>
+                    <div id="hum-hint" class="reading-hint"></div>
                 </div>
             </div>
 
@@ -578,6 +597,29 @@
                 }
             }
 
+            function updateReadingDisplay(cardId, valueId, unitId, hintId, value, unit, valid, placeholderText, hintText) {
+                const card = document.getElementById(cardId);
+                const valueEl = document.getElementById(valueId);
+                const unitEl = document.getElementById(unitId);
+                const hintEl = document.getElementById(hintId);
+
+                if (!valueEl || !unitEl || !hintEl) {
+                    return;
+                }
+
+                if (valid) {
+                    valueEl.innerText = value;
+                    unitEl.innerText = unit;
+                    hintEl.innerText = "";
+                    if (card) card.classList.remove("reading-stale");
+                } else {
+                    valueEl.innerText = placeholderText;
+                    unitEl.innerText = "";
+                    hintEl.innerText = hintText;
+                    if (card) card.classList.add("reading-stale");
+                }
+            }
+
             // === 初始化图表配置 ===
             const ctx = document.getElementById('tempChart').getContext('2d');
             const myChart = new Chart(ctx, {
@@ -658,11 +700,16 @@
                 }
 
                 // ---更新卡片文字---
-                document.getElementById("temp-val").innerText = data.temperature;
-                document.getElementById("hum-val").innerText = data.humidity;
+                const tempValue = parseFloat(data.temperature);
+                const humValue = parseFloat(data.humidity);
+                const tempValid = !isNaN(tempValue);
+                const humValid = !isNaN(humValue);
+
+                updateReadingDisplay("tempCard", "temp-val", "temp-unit", "temp-hint", data.temperature, "°C", tempValid, "暂无", "当前温度暂不可用，等待下一次采样");
+                updateReadingDisplay("humCard", "hum-val", "hum-unit", "hum-hint", data.humidity, "%", humValid, "暂无", "当前湿度暂不可用，等待下一次采样");
 
                 // ====== 新增：温度过高报警 ======
-                let currentTemp = parseFloat(data.temperature);
+                let currentTemp = tempValue;
                 if (!isNaN(currentTemp)) {
                     // 当当前温度超过设定阈值
                     if (currentTemp > alarmThreshold) {
@@ -718,31 +765,34 @@
                 // 更新图表
                 const now = new Date();
                 const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
+                const readingValid = data.reading_valid !== false;
 
-                // 添加新时间点到X轴
-                myChart.data.labels.push(timeLabel);
-                
-                // 先填入 0 或起始值，让点先“蹲在底部”
-                myChart.data.datasets[0].data.push(0);
-                myChart.data.datasets[1].data.push(0);
-
-                  // 保持图表不至于太挤，只保留最近5个点
-                  if (myChart.data.labels.length > 5) {
-                    myChart.data.labels.shift(); // 删掉最旧的时间
-                    myChart.data.datasets[0].data.shift(); // 删掉最旧的温度
-                    myChart.data.datasets[1].data.shift(); // 删掉最旧的湿度
+                if (!readingValid) {
+                    clearWebHighTempAlert();
                 }
 
-                // 第一步更新：静默更新（无动画），这时点在底部
-                myChart.update('none');
+                // 添加新时间点到X轴
+                // 先裁掉最旧的点，再添加新的点，减少滚动时的抖动感
+                if (myChart.data.labels.length >= 5) {
+                    myChart.data.labels.shift();
+                    myChart.data.datasets[0].data.shift();
+                    myChart.data.datasets[1].data.shift();
+                }
 
-                // 修改为真实数据
-                // 获取数组最后一个位置的索引
-                const lastIndex = myChart.data.datasets[0].data.length - 1;
-                myChart.data.datasets[0].data[lastIndex] = data.temperature;
-                myChart.data.datasets[1].data[lastIndex] = data.humidity;
+                myChart.data.labels.push(timeLabel);
 
-                // 第二步更新：默认更新（带动画），点会从底部“飘”上来
+                // 无效数据直接记为 null，保留断点
+                myChart.data.datasets[0].data.push(readingValid && tempValid ? tempValue : null);
+                myChart.data.datasets[1].data.push(readingValid && humValid ? humValue : null);
+
+                if (!readingValid) {
+                    const tempCard = document.getElementById("tempCard");
+                    const humCard = document.getElementById("humCard");
+                    if (tempCard) tempCard.classList.add("reading-stale");
+                    if (humCard) humCard.classList.add("reading-stale");
+                }
+
+                // 直接使用默认更新，让折线平滑过渡到新数据
                 myChart.update();
 
                 // === 新增：更新历史柱状图 ===
@@ -765,11 +815,11 @@
                             humHighs.push(dayData.max_hum);
                             humLows.push(dayData.min_hum);
                         } else {
-                            tempLabels.push(""); // 无数据留空
-                            tempHighs.push(0); 
-                            tempLows.push(0);
-                            humHighs.push(0);
-                            humLows.push(0);
+                            tempLabels.push(weekdayMap[(new Date().getDay() - (6 - i) + 7) % 7]);
+                            tempHighs.push(null); 
+                            tempLows.push(null);
+                            humHighs.push(null);
+                            humLows.push(null);
                         }
                     }
                 }
@@ -789,6 +839,8 @@
                     myWeeklyHumChart.update();
                 }
             }
+
+            const DATA_REFRESH_INTERVAL_MS = 3000;
 
             // === 传统 HTTP 数据获取 (轮询保底) ===
             function fetchData() {
@@ -845,7 +897,7 @@
                                 ws.close(); // 这将强行截断 Socket，释放服务器资源并触发 onclose
                             }
                         }
-                    }, 2000);
+                    }, DATA_REFRESH_INTERVAL_MS);
                 };
 
                 ws.onmessage = function(event) {
@@ -865,7 +917,7 @@
                      clearInterval(pollingTimer);
                      
                      // 1. 无缝保底，立刻先用基础 HTTP 获取数据
-                     pollingTimer = setInterval(fetchData, 2000); 
+                     pollingTimer = setInterval(fetchData, DATA_REFRESH_INTERVAL_MS); 
                      
                      // 2. 调度并在后台尝试重新爬起更高质量的 WS 连接
                      clearTimeout(wsReconnectTimer);

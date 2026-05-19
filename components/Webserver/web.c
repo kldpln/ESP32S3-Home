@@ -40,10 +40,9 @@ static esp_err_t index_handler(httpd_req_t *req)
 static char* generate_data_json()
 {
     // 获取实时温湿度数据
-    int temp_int = get_temperature_int();
-    int temp_dec = get_temperature_dec();
-    int hum_int = get_humidity_int();
-    int hum_dec = get_humidity_dec();
+    bool reading_valid = get_current_reading_valid();
+    float current_temp = get_current_temperature();
+    float current_hum = get_current_humidity();
 
     // 获取今日统计数据
     float max_t_today, min_t_today, max_h_today, min_h_today;
@@ -58,15 +57,27 @@ static char* generate_data_json()
     if (json_response == NULL) {
         return NULL;
     }
+    char temp_field[32];
+    char hum_field[32];
+    if (reading_valid) {
+        snprintf(temp_field, sizeof(temp_field), "\"%.1f\"", current_temp);
+        snprintf(hum_field, sizeof(hum_field), "\"%.1f\"", current_hum);
+    } else {
+        snprintf(temp_field, sizeof(temp_field), "null");
+        snprintf(hum_field, sizeof(hum_field), "null");
+    }
+
     //今日数据
     int offset = 0;
     offset += sprintf(json_response + offset, 
-             "{\"temperature\": \"%d.%d\", \"humidity\": \"%d.%d\", "
+             "{\"reading_valid\": %s, \"temperature\": %s, \"humidity\": %s, "
              "\"max_temp_today\": \"%.1f\", \"min_temp_today\": \"%.1f\", "
              "\"max_hum_today\": \"%.1f\", \"min_hum_today\": \"%.1f\", "
              "\"alarmThreshold\": \"%.1f\", "
              "\"history\": [", 
-             temp_int, temp_dec, hum_int, hum_dec, 
+             reading_valid ? "true" : "false",
+             temp_field,
+             hum_field,
              max_t_today, min_t_today, max_h_today, min_h_today,
              g_alarm_threshold);
 

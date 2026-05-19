@@ -18,6 +18,13 @@ int get_temperature_dec(void);
 int get_humidity_int(void);
 int get_humidity_dec(void);
 
+// 获取当前采样是否有效
+bool get_current_reading_valid(void);
+
+// 获取当前原始温湿度值（用于前端显示）
+float get_current_temperature(void);
+float get_current_humidity(void);
+
 //每天的数据结构
 typedef struct  
 {
