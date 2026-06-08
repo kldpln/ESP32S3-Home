@@ -14,8 +14,10 @@ void app_main()
 {
     // 初始化非易失性存储器
     ESP_ERROR_CHECK(nvs_flash_init());
+
     // 初始化软AP
     wifi_init_softap();
+
     // 启动web服务器
     start_webserver();
 
@@ -24,6 +26,7 @@ void app_main()
 
     // 初始化 DHT11
     data_process_init();
+    
     // 启动 DHT11 读取任务
     data_process_start_task();
 }

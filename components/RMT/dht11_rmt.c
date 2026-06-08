@@ -1,48 +1,20 @@
 #include "dht11_rmt.h"
-#include "driver/rmt_rx.h"  // RMT 接收通道的头文件
+#include "driver/rmt_rx.h"
 #include "esp_log.h"
-#include "rom/ets_sys.h"  // 用于 ets_delay_us() 函数
+#include "rom/ets_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
 static const char *TAG = "DHT11_RMT";
 
-// RMT 接收通道句柄
+/* RMT 接收通道句柄。 */
 static rmt_channel_handle_t rx_channel = NULL; 
 static gpio_num_t dht11_gpio  = GPIO_NUM_NC;
-// 数据接收队列
+/* 接收完成队列。 */
 static QueueHandle_t rx_receive_queue = NULL;
 
-// static void log_rmt_raw_symbols(const rmt_rx_done_event_data_t *rx_data)
-// {
-//     ESP_LOGI(TAG, "RMT 原始符号数量: %d", rx_data->num_symbols);
-//     for (int i = 0; i < rx_data->num_symbols; i++) {
-//         const rmt_symbol_word_t *symbol = &rx_data->received_symbols[i];
-//         ESP_LOGI(TAG, "SYM[%02d] L0=%d D0=%u us | L1=%d D1=%u us",
-//                  i,
-//                  symbol->level0, (unsigned int)symbol->duration0,
-//                  symbol->level1, (unsigned int)symbol->duration1);
-//     }
-// }
-//
-// static void log_dht11_bits_and_bytes(const uint8_t *bytes, int bit_count)
-// {
-//     char bit_text[41] = {0};
-//
-//     for (int i = 0; i < bit_count && i < 40; i++) {
-//         int byte_index = i / 8;
-//         int bit_index = 7 - (i % 8);
-//         int bit = (bytes[byte_index] >> bit_index) & 0x01;
-//         bit_text[i] = bit ? '1' : '0';
-//     }
-//
-//     ESP_LOGI(TAG, "解析后的二进制流: %s", bit_text);
-//     ESP_LOGI(TAG, "解析后的字节: %02X %02X %02X %02X %02X",
-//              bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]);
-// }
-
-// 接收完成回调函数
+/* 接收完成回调。 */
 static bool IRAM_ATTR example_rmt_rx_done_callback(rmt_channel_handle_t channel, const rmt_rx_done_event_data_t *edata, void *user_data)
 {
     BaseType_t high_task_wakeup = pdFALSE;
@@ -62,8 +34,8 @@ esp_err_t dht11_rmt_init(gpio_num_t gpio_num)
 
     rmt_rx_channel_config_t rx_chan_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = 1000000,       // 1MHz, 1us = 1 tick
-        .mem_block_symbols = 64,        // RMT符号内存块大小, 64 sufficient for DHT11
+        .resolution_hz = 1000000,
+        .mem_block_symbols = 64,
         .gpio_num = gpio_num,
     };
 
@@ -72,14 +44,14 @@ esp_err_t dht11_rmt_init(gpio_num_t gpio_num)
 
     dht11_gpio = gpio_num;
     
-    // 新建接收数据队列
+    /* 创建接收队列。 */
     rx_receive_queue = xQueueCreate(1, sizeof(rmt_rx_done_event_data_t));
     if (!rx_receive_queue) {
         ESP_LOGE(TAG, "创建队列失败");
         return ESP_FAIL;
     }
 
-    // 注册接收完成回调函数
+    /* 注册接收完成回调。 */
     rmt_rx_event_callbacks_t cbs = {
         .on_recv_done = example_rmt_rx_done_callback,
     };
@@ -98,10 +70,10 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return ESP_ERR_INVALID_ARG;
     }
 
-    // 清空上次可能遗留的队列数据
+    /* 清空残留队列数据。 */
     xQueueReset(rx_receive_queue);
 
-    // 发送 20ms 开始信号脉冲启动 DHT11 单总线
+    /* 发送起始信号。 */
     gpio_set_direction(dht11_gpio, GPIO_MODE_OUTPUT);
     gpio_set_level(dht11_gpio, 1);
     ets_delay_us(1000);
@@ -109,18 +81,18 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
     gpio_set_level(dht11_gpio, 0);
     ets_delay_us(20000);
     
-    //  拉高 20us
+    /* 拉高 20 us。 */
     gpio_set_level(dht11_gpio, 1);
     ets_delay_us(20);
     
-    // 信号线设置为输入，并开启上拉，准备接收数据
+    /* 切换为输入并开启上拉。 */
     gpio_set_direction(dht11_gpio, GPIO_MODE_INPUT);
     gpio_set_pull_mode(dht11_gpio, GPIO_PULLUP_ONLY);
 
-    // 配置并启动 RMT 接收
+    /* 配置并启动 RMT 接收。 */
     rmt_receive_config_t receive_config = { 
-        .signal_range_min_ns = 100,             // 最小 0.1us，视为干扰
-        .signal_range_max_ns = 1000 * 1000,     // 最大 1000us (1ms)，超过判断为结束
+        .signal_range_min_ns = 100,
+        .signal_range_max_ns = 1000 * 1000,
     };
 
     static rmt_symbol_word_t raw_symbols[128];      
@@ -130,7 +102,7 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return err;
     }
 
-    // 等待回调通知完成 (最多等 1000ms)
+    /* 等待接收完成，超时时间为 1000 ms。 */
     rmt_rx_done_event_data_t rx_data;
     if (xQueueReceive(rx_receive_queue, &rx_data, pdMS_TO_TICKS(1000)) != pdTRUE) {
         ESP_LOGE(TAG, "接收超时");
@@ -139,14 +111,12 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return ESP_ERR_TIMEOUT;
     }
 
-    // log_rmt_raw_symbols(&rx_data);
-
-    // 使用精准线性波形解析法（消除起始段杂波错位导致的左移翻倍问题）
+    /* 展开 RMT 符号数据。 */
     int durations[160] = {0};
     int levels[160] = {0};
     int pulse_count = 0;
 
-    // 将 RMT 中混乱的符号组展开成一维的单纯电平和时长数组
+    /* 将符号流展开为电平和时长序列。 */
     for (int i = 0; i < rx_data.num_symbols && pulse_count < 158; i++) {
         if (rx_data.received_symbols[i].duration0 > 0) {
             durations[pulse_count] = rx_data.received_symbols[i].duration0;
@@ -163,12 +133,12 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
     uint8_t dht11_bytes[5] = {0};
     int bit_index = 0;
 
-    // 智能锁定，不盲目依赖固定索引：
+    /* 锁定有效数据位。 */
     for (int i = 1; i < pulse_count; i++) {
-        // 找寻一次标准的数据位开始：高电平之前的低电平应该在 50us 左右
+        /* 标准数据位的低电平约为 50 us。 */
         if (levels[i] == 1 && levels[i-1] == 0) {
             if (durations[i-1] >= 30 && durations[i-1] <= 75) {
-                // 判断此高电平时长：标准中 26-28us 代表0，70us 代表 1。以 40us 为楚河汉界。
+                /* 以高电平时长区分 0 和 1。 */
                 bool is_bit_one = (durations[i] > 40);
 
                 dht11_bytes[bit_index / 8] <<= 1;
@@ -189,21 +159,18 @@ esp_err_t dht11_rmt_read(dht11_reading_t *data)
         return ESP_ERR_INVALID_SIZE;
     }
 
-    // log_dht11_bits_and_bytes(dht11_bytes, bit_index);
-
-    // 校验数据
+    /* 校验数据。 */
     uint8_t checksum = dht11_bytes[0] + dht11_bytes[1] + dht11_bytes[2] + dht11_bytes[3];
     if (checksum != dht11_bytes[4]) {
         ESP_LOGE(TAG, "Checksum failure: calc:%02X != recv:%02X", checksum, dht11_bytes[4]);
         return ESP_FAIL;
     }
 
-    // 转换为 Float 返回。
-    // DHT11数据结构: Byte0=湿度整数, Byte1=湿度小数, Byte2=温度整数, Byte3=温度小数
+    /* 转换为浮点值。 */
     data->humidity = dht11_bytes[0] + dht11_bytes[1] * 0.1f;
     data->temperature = dht11_bytes[2] + (dht11_bytes[3] & 0x7F) * 0.1f;
     
-    // 处理负温 (如果温度第四字节的最高位是1)
+    /* 处理负温标志。 */
     if (dht11_bytes[3] & 0x80) {
         data->temperature = -data->temperature;
     }

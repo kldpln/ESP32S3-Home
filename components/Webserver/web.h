@@ -3,7 +3,7 @@
 
 #include "esp_http_server.h"
 
-// 启动web服务器的函数声明
+/* 启动 Web 服务器。 */
 httpd_handle_t start_webserver(void);
 
-#endif // WEB_H
+#endif

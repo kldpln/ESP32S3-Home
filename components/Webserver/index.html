@@ -216,7 +216,7 @@
             .text-red { color: #ff6384; }
             .text-blue { color: #36a2eb; }
 
-            /* 新增：弹窗模态框样式 */
+            /* 弹窗模态框样式 */
             .modal-overlay {
                 display: none; /* 默认隐藏 */
                 position: fixed;
@@ -357,7 +357,7 @@
         </style>
     </head>
     <body>
-        <!-- 新增：Wi-Fi配网弹窗模态框 -->
+        <!-- Wi-Fi 配网弹窗 -->
         <div id="wifiModal" class="modal-overlay">
             <div class="modal-content">
                 <span class="close-btn" onclick="closeWifiModal()">&times;</span>
@@ -418,7 +418,7 @@
                 <canvas id="tempChart"></canvas>
              </div>
 
-              <!-- 新增：优雅的独立报警配置卡片 (位于图表下方) -->
+              <!-- 独立报警配置卡片 -->
               <div class="card" style="margin-top: 20px; margin-bottom: 25px; padding: 15px 20px; display: flex; flex-direction: column; gap: 18px;">
                   <div style="display: flex; align-items: center; gap: 12px;">
                       <div style="font-size: 1.8rem; background: rgba(255, 94, 91, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; justify-content: center; align-items: center;">
@@ -507,18 +507,18 @@
              </div>
         </div>
 
-        <!--图表库-->
+        <!-- 图表库 -->
         <script src="/chart.js"></script>
 
-        <!-- 温湿度文字显示脚本模块-->
+        <!-- 温湿度显示脚本 -->
         <script>
-            let pollingTimer = null; // 轮询保底定时器
-            let ws = null; // 全局 WebSocket 对象
+            let pollingTimer = null; // 轮询定时器
+            let ws = null; // WebSocket 对象
 
-            // ======= 报警控制变量 ======= //
+            // 报警控制变量
             let alarmThreshold = 30.0;
-            let isAlarmActive = false; // 记录报警状态，防止一直接收轰炸通知
-            let isFirstLoad = true;    // 标记是否第一次加载数据
+            let isAlarmActive = false; // 报警状态标志
+            let isFirstLoad = true;    // 首次加载标志
             let lastWebAlarmPopupAt = 0;
 
             document.addEventListener("DOMContentLoaded", function () {
@@ -526,13 +526,13 @@
                 if(thresholdInput) {
                     thresholdInput.addEventListener("change", function(e) {
                         alarmThreshold = parseFloat(e.target.value) || 30.0;
-                        isAlarmActive = false; // 修改阈值后重置状态
+                        isAlarmActive = false; // 重置报警状态
                         clearWebHighTempAlert();
                     });
                 }
             });
 
-            // 保存报警阈值到后端的函数
+            // 保存报警阈值
             function saveAlarmThreshold() {
                 const inputVal = document.getElementById("alarmThresholdInput").value;
                 const newThreshold = parseFloat(inputVal);
@@ -541,12 +541,12 @@
                     return;
                 }
                 
-                // 更新前端本地变量
+                // 更新本地状态
                 alarmThreshold = newThreshold;
                 isAlarmActive = false;
                 clearWebHighTempAlert();
                 
-                // POST 请求发送给 ESP32 后端
+                // 提交报警阈值到后端
                 fetch('/set_alarm', {
                     method: 'POST',
                     cache: 'no-store',
@@ -620,36 +620,36 @@
                 }
             }
 
-            // === 初始化图表配置 ===
+            // 图表配置
             const ctx = document.getElementById('tempChart').getContext('2d');
             const myChart = new Chart(ctx, {
-                type: 'line', // 折线图
+                type: 'line',
                 data: {
-                    labels: [], // X轴：时间
+                    labels: [],
                     datasets: [
                         {
                             label: '温度 (°C)',
                             data: [],
-                            borderColor: 'rgba(255, 99, 132, 1)', // 红色线条
-                            backgroundColor: 'rgba(255, 99, 132, 0.2)', // 红色填充背景
-                            tension: 0.4, // 平滑曲线
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            tension: 0.4,
                             borderWidth: 2,
-                            yAxisID: 'y' // 绑定到左侧Y轴
+                            yAxisID: 'y'
                         },
                         {
                             label: '湿度 (%)',
                             data: [],
-                            borderColor: 'rgba(54, 162, 235, 1)', // 蓝色线条
+                            borderColor: 'rgba(54, 162, 235, 1)',
                             backgroundColor: 'rgba(54, 162, 235, 0.2)',
                             tension: 0.4,
                             borderWidth: 2,
-                            yAxisID: 'y1' // 绑定到右侧Y轴 (双轴显示更清晰)
+                            yAxisID: 'y1'
                         }
                     ]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false, // 关键：关闭默认比例，允许图表撑满自定义高度的容器
+                    maintainAspectRatio: false,
                     interaction: {
                         mode: 'index',
                         intersect: false,
@@ -664,33 +664,33 @@
                             display: true,
                             position: 'left',
                             title: { display: true, text: '温度' },
-                            min: 0, // 固定温度下限
-                            max: 50 // 固定温度上限
+                            min: 0,
+                            max: 50
                         },
                         y1: {
                             type: 'linear',
                             display: true,
                             position: 'right',
                             title: { display: true, text: '湿度' },
-                            min: 0, // 固定湿度下限
-                            max: 100, // 固定湿度上限
+                            min: 0,
+                            max: 100,
                             grid: {
-                                drawOnChartArea: false, // 右侧轴不画网格线，防乱
+                                drawOnChartArea: false,
                             }
                         }
                     }
                 }
             });
 
-            // 把原来 fetchData 里更新 UI 的部分提取出来，给 WebSocket 和 HTTP 共同使用
+            // 公用界面更新函数
             function updateUI(data) {
-                // 如果后端传回了保存的阈值
+                // 更新报警阈值
                 if (data.alarmThreshold) {
                     let serverThreshold = parseFloat(data.alarmThreshold);
                     if (!isNaN(serverThreshold)) {
                         alarmThreshold = serverThreshold;
                         
-                        // 除非用户正在操作修改这个输入框，否则实时同步页面上的显示值
+                        // 非编辑状态下同步输入框
                         const inputEl = document.getElementById("alarmThresholdInput");
                         if (document.activeElement !== inputEl) {
                             inputEl.value = serverThreshold;
@@ -699,7 +699,7 @@
                     isFirstLoad = false;
                 }
 
-                // ---更新卡片文字---
+                // 更新卡片显示
                 const tempValue = parseFloat(data.temperature);
                 const humValue = parseFloat(data.humidity);
                 const tempValid = !isNaN(tempValue);
@@ -708,15 +708,15 @@
                 updateReadingDisplay("tempCard", "temp-val", "temp-unit", "temp-hint", data.temperature, "°C", tempValid, "暂无", "当前温度暂不可用，等待下一次采样");
                 updateReadingDisplay("humCard", "hum-val", "hum-unit", "hum-hint", data.humidity, "%", humValid, "暂无", "当前湿度暂不可用，等待下一次采样");
 
-                // ====== 新增：温度过高报警 ======
+                // 高温报警
                 let currentTemp = tempValue;
                 if (!isNaN(currentTemp)) {
-                    // 当当前温度超过设定阈值
+                    // 温度超过阈值
                     if (currentTemp > alarmThreshold) {
                         showWebHighTempAlert(currentTemp);
-                        // 确认之前是否已经弹出过警告
+                        // 去重报警提示
                         if (!isAlarmActive) {
-                            isAlarmActive = true; // 锁定报警状态
+                            isAlarmActive = true;
                             if (window.AndroidBridge && window.AndroidBridge.triggerAlert) {
                                 window.AndroidBridge.triggerAlert(
                                     "温度过高警告！", 
@@ -732,13 +732,13 @@
                             }
                         }
                     } else {
-                        // 如果温度降下来了，解除报警锁定，以便下次还能正常通知
+                        // 温度恢复后解除报警
                         isAlarmActive = false;
                         clearWebHighTempAlert();
                     }
                 }
 
-                // 更新昨日数据 (改为读取 history[0])
+                // 更新昨日数据
                 if(document.getElementById("yesterday-max-temp")) {
                     if(data.history && data.history[0] && data.history[0] !== null) {
                         const yData = data.history[0];
@@ -754,7 +754,7 @@
                     }
                 }
                 
-                // 更新今日数据 (字段名保持不变，直接赋值)
+                // 更新今日数据
                 if(document.getElementById("today-max-temp")) {
                     document.getElementById("today-max-temp").innerText = data.max_temp_today + "°C";
                     document.getElementById("today-min-temp").innerText = data.min_temp_today + "°C";
@@ -762,7 +762,7 @@
                     document.getElementById("today-min-hum").innerText = data.min_hum_today + "%";
                 }
         
-                // 更新图表
+                // 更新折线图
                 const now = new Date();
                 const timeLabel = now.getHours() + ':' + now.getMinutes() + ':' + now.getSeconds();
                 const readingValid = data.reading_valid !== false;
@@ -771,8 +771,7 @@
                     clearWebHighTempAlert();
                 }
 
-                // 添加新时间点到X轴
-                // 先裁掉最旧的点，再添加新的点，减少滚动时的抖动感
+                // 维护滑动窗口
                 if (myChart.data.labels.length >= 5) {
                     myChart.data.labels.shift();
                     myChart.data.datasets[0].data.shift();
@@ -781,7 +780,7 @@
 
                 myChart.data.labels.push(timeLabel);
 
-                // 无效数据直接记为 null，保留断点
+                // 无效数据记为 null
                 myChart.data.datasets[0].data.push(readingValid && tempValid ? tempValue : null);
                 myChart.data.datasets[1].data.push(readingValid && humValid ? humValue : null);
 
@@ -792,11 +791,11 @@
                     if (humCard) humCard.classList.add("reading-stale");
                 }
 
-                // 直接使用默认更新，让折线平滑过渡到新数据
+                // 刷新图表
                 myChart.update();
 
-                // === 新增：更新历史柱状图 ===
-                // 准备数据容器
+                // 更新历史柱状图
+                // 初始化数据容器
                 let tempLabels = [];
                 let tempHighs = [];
                 let tempLows = [];
@@ -805,7 +804,7 @@
                 const weekdayMap = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
                 if (data.history) {
-                    // 倒序遍历: 7天前 -> 昨天
+                    // 倒序遍历历史数据
                     for (let i = 6; i >= 0; i--) {
                         const dayData = data.history[i];
                         if (dayData && dayData !== null) {
@@ -823,7 +822,7 @@
                         }
                     }
                 }
-                // 如果 myWeeklyChart 已经初始化了，就更新它
+                // 更新温度周图
                 if (typeof myWeeklyChart !== 'undefined' && myWeeklyChart) {
                     myWeeklyChart.data.labels = tempLabels;
                     myWeeklyChart.data.datasets[0].data = tempHighs;
@@ -831,7 +830,7 @@
                     myWeeklyChart.update();
                 }
 
-                // 更新湿度周趋势柱状图
+                // 更新湿度周图
                 if (typeof myWeeklyHumChart !== 'undefined' && myWeeklyHumChart) {
                     myWeeklyHumChart.data.labels = tempLabels;
                     myWeeklyHumChart.data.datasets[0].data = humHighs;
@@ -842,29 +841,29 @@
 
             const DATA_REFRESH_INTERVAL_MS = 3000;
 
-            // === 传统 HTTP 数据获取 (轮询保底) ===
+            // HTTP 轮询兜底
             function fetchData() {
-                // 使用时间戳强制绕过所有缓存机制，防止累积过长的请求头
+                // 禁用缓存
                 fetch('/data?t=' + Date.now(), { cache: 'no-store' })
                     .then(response => response.json())
                     .then(data => {
-                        updateUI(data); // 抛给公用函数更新界面
+                        updateUI(data);
                     })
                     .catch(error => console.error('HTTP Fetch Error:', error));
             }
 
-            // === 超级 WebSocket 实时引擎 (防幽灵连接增强版) ===
+            // WebSocket 实时连接
             let lastWsMessageTime = 0;
             let wsReconnectTimer = null;
 
             function initWebSocket() {
                 console.log("尝试建立 WebSocket 实时连接...");
 
-                // 【核心修复】进入重新初始化前，必须清空上个世代的任何定时器，防止叠罗汉！
+                // 清理旧定时器
                 if (typeof pollingTimer !== 'undefined') clearInterval(pollingTimer);
                 if (typeof wsReconnectTimer !== 'undefined') clearTimeout(wsReconnectTimer);
 
-                // 强杀旧连接，防止跨网后 App 内存和套接字偷偷泄漏
+                // 关闭旧连接
                 if (ws) {
                     ws.onclose = null;
                     ws.onerror = null;
@@ -877,32 +876,32 @@
                 }
 
                 const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-                // 动态获取主机名以支持 IP 和 mDNS 访问
+                // 兼容 IP 和 mDNS
                 ws = new WebSocket(wsProtocol + window.location.host + "/ws");
                 lastWsMessageTime = Date.now();
 
                 ws.onopen = function() {
-                    console.log("✅ WebSocket 连接成功！开启无头压缩高效传输！");
-                    // 连接成功后，关掉传统轮询，改用 WS 定时心跳请求数据（后端等待 "get"）
+                    console.log("WebSocket 连接成功");
+                    // 连接成功后关闭轮询
                     clearInterval(pollingTimer);
-                    lastWsMessageTime = Date.now(); // 刚连上也重置下时间
+                    lastWsMessageTime = Date.now();
                     
                     pollingTimer = setInterval(() => {
                         if(ws && ws.readyState === WebSocket.OPEN) {
                             ws.send("get"); 
                             
-                            // 【核心防丢包】如果发了 get 但 8 秒没收到任何回复，说明底层 TCP 已经死于网络切换
+                            // 心跳超时处理
                             if (Date.now() - lastWsMessageTime > 8000) {
-                                console.warn("❌ WS 心跳超时，连接被网络抖动阻塞！立即自杀并触发重连...");
-                                ws.close(); // 这将强行截断 Socket，释放服务器资源并触发 onclose
+                                console.warn("WS 心跳超时，准备重连");
+                                ws.close();
                             }
                         }
                     }, DATA_REFRESH_INTERVAL_MS);
                 };
 
                 ws.onmessage = function(event) {
-                    lastWsMessageTime = Date.now(); // 每次收到合法数据，立刻续命
-                    // 收到极其干净的 JSON 数据帧，直接丢给 updateUI 渲染
+                    lastWsMessageTime = Date.now();
+                    // 解析并更新界面
                     try {
                         const data = JSON.parse(event.data);
                         updateUI(data);
@@ -912,25 +911,25 @@
                 };
 
                 ws.onclose = function() {
-                     console.warn("⚠️ WebSocket 被断开！进入 HTTP 保底和自动恢复策略！");
-                     // 防止重复重启降级，清空当前收发器
+                     console.warn("WebSocket 已断开，切换到 HTTP 兜底");
+                     // 清理重连状态
                      clearInterval(pollingTimer);
                      
-                     // 1. 无缝保底，立刻先用基础 HTTP 获取数据
+                     // 启用 HTTP 兜底
                      pollingTimer = setInterval(fetchData, DATA_REFRESH_INTERVAL_MS); 
                      
-                     // 2. 调度并在后台尝试重新爬起更高质量的 WS 连接
+                     // 安排重连
                      clearTimeout(wsReconnectTimer);
                      wsReconnectTimer = setTimeout(initWebSocket, 8000);
                 };
                 
                 ws.onerror = function(err) {
                     console.error("WS 错误: ", err);
-                    // 发生错误必然引发 close，把收尾工作统一交给 onclose 处理
+                    // 错误处理交给 close
                 };
             }
 
-            // 监听网络环境突变 (移动端基站/Wi-Fi切换、切回前台等事件)，主动切断死连接
+            // 监听网络变化
             window.addEventListener('online', () => { 
                 console.log("检测到网络切换或恢复！立即重置通讯连接！");
                 if(ws) ws.close(); 
@@ -940,22 +939,22 @@
             window.addEventListener('beforeunload', () => { if(ws) ws.close(); });
             window.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') {
-                    // App重回前台如果发现 WS 断开或者超时，可以更积极地唤醒重连
+                    // 页面恢复可见时重连
                     if(ws && ws.readyState !== WebSocket.OPEN) initWebSocket();
                 }
             });
 
-            //时间同步函数
+            // 时间同步
             function syncTime() {
-                //获取浏览器时间并转换为秒
+                // 获取浏览器时间
                 const timestamp = Math.floor(Date.now() / 1000);
                 console.log("正在同步时间:", timestamp);
 
-                //发送POST请求到服务器的时间同步接口
+                // 提交时间同步请求
                 fetch('/sync_time', {
                     method: 'POST',
                     cache: 'no-store',
-                    body: timestamp.toString() //将时间转换为字符串发送
+                    body: timestamp.toString()
                 })
                 .then(response => {
                     if (response.ok) {
@@ -966,18 +965,18 @@
                 })
                 .catch(error => console.error('同步请求出错:', error));
             }
-            //页面加载完成后同步
+            // 页面加载后同步时间
             syncTime();
             
-            //启动定时器及 WebSocket
-            fetchData(); // 先发一次 HTTP 数据请求预热
-            initWebSocket(); // 启动 WebSocket 取代定时器（若失败自动重走定时器轮询）
+            // 启动数据连接
+            fetchData();
+            initWebSocket();
 
-            // === 新增：Wi-Fi 配网弹窗逻辑 ===
+            // Wi-Fi 配网弹窗
             function openWifiModal() {
                 const modal = document.getElementById("wifiModal");
                 modal.style.display = "flex";
-                // 触发重绘以实现过渡动画
+                // 触发重绘
                 setTimeout(() => modal.classList.add("show"), 10);
                 document.getElementById("wifiStatus").style.display = "none";
             }

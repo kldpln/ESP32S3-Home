@@ -8,4 +8,4 @@ extern bool g_is_ntp_synced;
 void wifi_init_softap(void);
 void wifi_sta_reset_retry_and_connect(void);
 
-#endif // AP_H
+#endif

@@ -4,9 +4,7 @@ import time
 import urllib.request
 import socket
 
-# === 配置区 ===
-# 如果你的 Windows 系统解析不了 esp.local，请将这里改为你看串口打印出的 ESP32 IP 地址
-# 例如：HOST = "192.168.31.100"
+
 HOST = "esp.local" 
 WS_URL = f"ws://{HOST}/ws"
 HTTP_URL = f"http://{HOST}/data"

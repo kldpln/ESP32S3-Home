@@ -14,16 +14,16 @@
 static const char *TAG = "SYS_MON";
 static uint32_t monitor_interval_ms = 2000;
 
-// 内部采集与打印任务
+/* 系统状态采集与输出任务。 */
 static void system_monitor_task(void *pvParameters)
 {
     (void)pvParameters;
     while (1) {
-        // uptime
+        /* 运行时长。 */
         int64_t us = esp_timer_get_time();
         uint64_t uptime_ms = (us >= 0) ? (uint64_t)(us / 1000) : 0;
 
-        // heap
+        /* 堆内存统计。 */
         size_t free_heap = esp_get_free_heap_size();
         size_t min_free_heap = esp_get_minimum_free_heap_size();
         size_t free_8bit = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -31,7 +31,7 @@ static void system_monitor_task(void *pvParameters)
         size_t used_8bit = total_8bit > free_8bit ? (total_8bit - free_8bit) : 0;
         float mem_usage_pct = total_8bit > 0 ? (100.0f * (float)used_8bit) / (float)total_8bit : 0.0f;
 
-        // tasks
+        /* 任务运行统计。 */
         char *tasks_json = NULL;
         size_t tasks_json_len = 0;
 
@@ -51,7 +51,7 @@ static void system_monitor_task(void *pvParameters)
                     char entry[256];
                     const char *name = task_status_array[i].pcTaskName;
                     UBaseType_t high_water = task_status_array[i].usStackHighWaterMark;
-                    uint32_t run_time = task_status_array[i].ulRunTimeCounter; // may be 0 if stats disabled
+                    uint32_t run_time = task_status_array[i].ulRunTimeCounter;
                     float pct = 0.0f;
                     if (total_run_time > 0) {
                         pct = (100.0f * (float)run_time) / (float)total_run_time;
@@ -74,7 +74,7 @@ static void system_monitor_task(void *pvParameters)
             vPortFree(task_status_array);
         }
 #else
-        // Trace facility not enabled: provide basic task count but no per-task run-time stats
+        /* 未启用跟踪功能时，仅输出基础任务信息。 */
         tasks_json_len = 64;
         tasks_json = pvPortMalloc(tasks_json_len);
         if (tasks_json) {
@@ -82,8 +82,8 @@ static void system_monitor_task(void *pvParameters)
         }
 #endif
 
-        // Compose full JSON line
-        // Note: use printf to get a clean line without ESP_LOG prefix
+        /* 组合完整 JSON 输出。 */
+        /* 使用 printf 以避免 ESP_LOG 前缀。 */
         if (tasks_json) {
                  printf("{\"uptime_ms\":%llu,\"free_heap\":%u,\"min_free_heap\":%u,\"free_8bit\":%u,\"total_heap_8bit\":%u,\"used_heap_8bit\":%u,\"mem_usage_pct\":%.2f,\"tasks\":%s}\n",
                      (unsigned long long)uptime_ms, (unsigned)free_heap, (unsigned)min_free_heap, (unsigned)free_8bit,
@@ -101,7 +101,7 @@ static void system_monitor_task(void *pvParameters)
 
 void system_monitor_init(void)
 {
-    // nothing to init for now
+    /* 当前无需额外初始化。 */
 }
 
 void system_monitor_start_task(uint32_t interval_ms)

@@ -8,45 +8,45 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "data_process.h"
-#include "dht11_rmt.h" // 引入 RMT 驱动
+#include "dht11_rmt.h"
 
-#define DHT11_GPIO 7  // DHT11引脚定义
+#define DHT11_GPIO 7
 const static char *TAG = "DHT11";
 
-//历史数据
-static DailyData history_data[7]; // 存储最近7天的数据,0表示昨天，1表示前天,,,
+/* 最近 7 天的历史数据，索引 0 表示昨天。 */
+static DailyData history_data[7];
 
-//今日极值
+/* 当日极值统计。 */
 static float curr_max_temp;
 static float curr_min_temp;
 static float curr_max_hum;
 static float curr_min_hum;
 
-static int last_processed_weekday = -1; // 上次处理数据的星期几，初始值为-1表示未处理过
+/* 最近一次完成日结算的日期。 */
+static int last_processed_weekday = -1;
 static bool first_read = true;
 static const char* NVS_NAMESPACE = "history";
 
-// 实时温度 湿度buffer
+/* 当前采样缓存。 */
 static uint8_t buffer[5];
 static float current_temperature = 0.0f;
 static float current_humidity = 0.0f;
 static bool current_reading_valid = false;
 
-// DHT11 初始化引脚，等待1s上电时间
+/* 初始化 DHT11 采样模块。 */
 void data_process_init()
 {
-    // 初始化 RMT 底层驱动代替原有的 GPIO 手动配置
     dht11_rmt_init((gpio_num_t)DHT11_GPIO);
-    
-    // 从NVS中读取数据
+
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
     if (err == ESP_OK) {
         size_t required_size = sizeof(history_data);
         err = nvs_get_blob(my_handle, "history", history_data, &required_size);
-        if (err != ESP_OK)  memset(history_data, 0, sizeof(history_data)); // 如果读取失败，初始化为0
-        
-        //读取上次处理的日期
+        if (err != ESP_OK) {
+            memset(history_data, 0, sizeof(history_data));
+        }
+
         nvs_get_i32(my_handle, "last_weekday", (int32_t*)&last_processed_weekday);
         nvs_close(my_handle);
         ESP_LOGI(TAG, "历史数据从NVS加载成功");
@@ -57,7 +57,7 @@ void data_process_init()
     vTaskDelay(1200 / portTICK_PERIOD_MS);
 }
 
-// 保存统计数据到 NVS
+/* 保存历史统计数据到 NVS。 */
 static void save_history_to_nvs() {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &my_handle);
@@ -72,7 +72,7 @@ static void save_history_to_nvs() {
     }
 }
 
-// DHT11 任务函数
+/* DHT11 采样任务。 */
 static void data_process_task(void *pvParameters)
 {
     while (1)
@@ -82,18 +82,16 @@ static void data_process_task(void *pvParameters)
         
         if (result == ESP_OK)
         {
-            // 最大最小值检测
-
-            // 定义上一次的有效读数，用于对比
+            /* 上一次有效读数，用于异常筛选。 */
             static float last_valid_temp = -999.0;
             static float last_valid_hum = -999.0;
-            bool valid = true; //数据有效标签
+            bool valid = true;
 
-            //温湿度计算 (直接使用 rmt 读到的数据，更加精确)
+            /* 读取当前温湿度值。 */
             float temp = rmt_data.temperature;
             float hum = rmt_data.humidity;
 
-            //异常值过滤
+            /* 异常值过滤。 */
             if(last_valid_temp != -999.0){
                 if (abs(temp - last_valid_temp) >10.0 || abs(hum - last_valid_hum) > 30.0)
                 {
@@ -113,15 +111,15 @@ static void data_process_task(void *pvParameters)
                 ESP_LOGW(TAG, "当前采样无效，等待下一次有效数据");
             }
 
-            // 只有有效数据才更新缓存，避免把旧值继续冒充成新值
+            /* 仅在有效采样时更新显示缓存。 */
             if (current_reading_valid) {
-                buffer[2] = (int)temp;                           // 温度整数
-                buffer[3] = (int)((temp - buffer[2]) * 10);      // 温度小数
-                buffer[0] = (int)hum;                            // 湿度整数
-                buffer[1] = (int)((hum - buffer[0]) * 10);       // 湿度小数
+                buffer[2] = (int)temp;
+                buffer[3] = (int)((temp - buffer[2]) * 10);
+                buffer[0] = (int)hum;
+                buffer[1] = (int)((hum - buffer[0]) * 10);
             }
 
-            //最值对比
+            /* 更新当日极值。 */
             if (first_read) {
                 curr_max_temp = temp;
                 curr_min_temp = temp;
@@ -135,45 +133,44 @@ static void data_process_task(void *pvParameters)
                 if (hum < curr_min_hum) curr_min_hum = hum;
             }
 
-            //时间同步检测
+            /* 检查时间同步状态。 */
             time_t now = time(NULL);
             struct tm timeinfo;
             localtime_r(&now, &timeinfo);
 
-            // 只有时间同步过才处理
-            static bool time_synced_once = false; // 首次同步标志
+            /* 仅在时间同步后执行日结算。 */
+            static bool time_synced_once = false;
             if (timeinfo.tm_year > (2020 - 1900)) {
                 if (!time_synced_once){
                     time_synced_once = true;
-                    last_processed_weekday = timeinfo.tm_mday; // 初始化为当前日期，避免开机就误判跨天
+                    last_processed_weekday = timeinfo.tm_mday;
                     ESP_LOGI("Time", "时间同步恢复，重置日期锚点，暂不结算历史数据");
-                    first_read = true; // 时间同步后重置极值，避免历史数据被新一天的异常值污染
+                    first_read = true;
                 }
 
                 else{
                 int today = timeinfo.tm_mday;
-                // 跨天了！(比如从10号变11号)
                     if (today != last_processed_weekday && last_processed_weekday != -1) {
                     ESP_LOGI("Time", "检测到跨天，从%d变为%d", last_processed_weekday, today);
 
-                    // 数组移位
+                    /* 历史数据整体后移。 */
                     for (int i = 6; i > 0; i--) {
                         history_data[i] = history_data[i-1];
                     }
 
-                    // 结算昨天 (current stats 就是昨天一整跑下来的结果)
+                    /* 归档昨日统计结果。 */
                     history_data[0].max_temp = curr_max_temp;
                     history_data[0].min_temp = curr_min_temp;
                     history_data[0].max_hum  = curr_max_hum;
                     history_data[0].min_hum  = curr_min_hum;
-                    history_data[0].timestamp = now - 86400; // 昨天的时刻
-                    history_data[0].weekday = (timeinfo.tm_wday - 1 + 7) % 7; // 昨天是周几
+                    history_data[0].timestamp = now - 86400;
+                    history_data[0].weekday = (timeinfo.tm_wday - 1 + 7) % 7;
                     history_data[0].valid = true;
 
-                    // 保存
+                    /* 持久化历史数据。 */
                     last_processed_weekday = today;
                     save_history_to_nvs();
-                    first_read = true; // 新的一天，重置极值
+                    first_read = true;
 
                 ESP_LOGI("Time", "24h周期重置 - 昨天的统计数据已保存到NVS");
                     
@@ -190,32 +187,31 @@ static void data_process_task(void *pvParameters)
     }
 }
 
-// 启动 DHT11 读取任务
+/* 启动 DHT11 读取任务。 */
 void data_process_start_task(void)
 {
-    // 固定到核心 1，高优先级 5
     xTaskCreatePinnedToCore(data_process_task, "data_process_task", 4096, NULL, 5, NULL, 1);
 }
 
-// 获取温度（整数部分）
+/* 获取温度整数部分。 */
 int get_temperature_int(void)
 {
     return buffer[2];
 }
 
-// 获取温度（小数部分）
+/* 获取温度小数部分。 */
 int get_temperature_dec(void)
 {
     return buffer[3];
 }
 
-// 获取湿度（整数部分）
+/* 获取湿度整数部分。 */
 int get_humidity_int(void)
 {
     return buffer[0];
 }
 
-// 获取湿度（小数部分）
+/* 获取湿度小数部分。 */
 int get_humidity_dec(void)
 {
     return buffer[1];
@@ -236,7 +232,7 @@ float get_current_humidity(void)
     return current_humidity;
 }
 
-// 获取今日最大最小值
+/* 获取当日温湿度极值。 */
 void get_today_stats(float *max_t, float *min_t, float *max_h, float *min_h)
 {
     *max_t = curr_max_temp;
@@ -245,10 +241,9 @@ void get_today_stats(float *max_t, float *min_t, float *max_h, float *min_h)
     *min_h = curr_min_hum;
 }
 
-// 获取昨日最大最小值
+/* 获取最近 7 天历史数据。 */
 void get_weekly_history(DailyData *history_array)
 {
-    // 将内部存储的历史数据复制给调用者
     if (history_array != NULL) {
         memcpy(history_array, history_data, sizeof(history_data));
     }
